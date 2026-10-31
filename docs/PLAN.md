@@ -1,3 +1,5 @@
+> **Lưu ý:** Đây là bản thiết kế ban đầu (roadmap, ý tưởng anti-cheat/payout). Nhiều phần **chưa được hiện thực** hoặc đã làm khác đi (ví dụ dùng SQLite thay MongoDB, presigned URL thay audio proxy). Trạng thái thực tế của code: xem [ARCHITECTURE.md](ARCHITECTURE.md#7-chưa-làm--khác-với-planmd).
+
 # Audio Annotation Platform — Plan
 
 ## 1. Tổng quan

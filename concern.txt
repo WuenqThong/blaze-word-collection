@@ -1,7 +1,0 @@
-1. không nên để frontend biết được đâu là golden dataset
-2. đảm bảo rằng hacker hoặc ngườ vọc không biết được đang có những project nào.
-3. một người vào xem được ng khác label
-4. tránhget được all data thông qua skips hoac gán bừa hoặ dựa trên đúng sai api
-
-
-python test_elevenlabs_realtime_stt.py
