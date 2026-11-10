@@ -46,5 +46,23 @@ class AuthService:
         self.db.refresh(user)
         return user
 
+    def update_name(self, user: User, full_name: str) -> User:
+        name = " ".join(full_name.split())
+        if not name:
+            raise HTTPException(status_code=422, detail="Tên hiển thị không được để trống")
+        user.full_name = name
+        self.db.commit()
+        self.db.refresh(user)
+        return user
+
+    def change_password(self, user: User, current: str, new: str) -> None:
+        # 400, not 401: a wrong current password must not look like an expired session.
+        if not verify_password(current, user.password_hash):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mật khẩu hiện tại không đúng")
+        if verify_password(new, user.password_hash):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Mật khẩu mới phải khác mật khẩu hiện tại")
+        user.password_hash = hash_password(new)
+        self.db.commit()
+
     def get_by_id(self, user_id: int) -> Optional[User]:
         return self.db.query(User).filter(User.id == user_id).first()

@@ -144,10 +144,10 @@ export function ReviewQueuePage() {
             ) : (
               <>
                 <div className="data-review-thead">
-                  <div className="data-review-th-file">Data</div>
+                  <div className="data-review-th-file">Dữ liệu</div>
                   <div className="data-review-th-project">Dự án</div>
                   <div className="data-review-th-tasks">Đồng thuận</div>
-                  <div className="data-review-th-action">Pending</div>
+                  <div className="data-review-th-action">Chờ duyệt</div>
                 </div>
                 <div className="data-review-list">
                   {items.map((it) => (
@@ -210,6 +210,7 @@ export function ReviewQueuePage() {
 
         {detailFor && (
           <DataDetailPanel
+            key={detailFor.audio_id}
             item={detailFor}
             onClose={() => setDetailFor(null)}
             onChanged={() => load()}
@@ -236,11 +237,10 @@ function DataRow({ item, active, onReview }: { item: DataReviewItem; active?: bo
   const consensus = aggregateConsensus(item);
   const cb = consensusBadge(consensus);
   return (
-    <div
-      role="button"
-      tabIndex={0}
+    <button
+      type="button"
       onClick={onReview}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onReview(); } }}
+
       className={`data-review-row data-review-row-clickable ${active ? "data-review-row-active" : ""}`}
     >
       <div className="data-review-row-main">
@@ -265,7 +265,7 @@ function DataRow({ item, active, onReview }: { item: DataReviewItem; active?: bo
         </span>
         <i className="bi bi-chevron-right data-review-row-chevron" aria-hidden="true"></i>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -313,11 +313,13 @@ function DataDetailPanel({
   useEffect(() => {
     setLoading(true);
     setError(null);
+    let current = true;
     reviewApi
       .reviewDataDetail(item.audio_id)
-      .then(setDetail)
-      .catch((e) => setError(extractError(e)))
-      .finally(() => setLoading(false));
+      .then((data) => { if (current) setDetail(data); })
+      .catch((e) => { if (current) setError(extractError(e)); })
+      .finally(() => { if (current) setLoading(false); });
+    return () => { current = false; };
   }, [item.audio_id]);
 
   const reload = () => {
@@ -355,7 +357,12 @@ function DataDetailPanel({
   return (
     <>
       <aside className="data-review-side">
+        <div className="collection-review-heading">
+          <div className="min-w-0"><strong>{item.filename}</strong><span>{item.project_name}</span></div>
+          <button type="button" className="workspace-icon-button" onClick={onClose} aria-label="Đóng chi tiết kiểm duyệt"><i className="bi bi-x-lg" aria-hidden="true" /></button>
+        </div>
         <div className="data-review-side-body">
+          <div className="d-flex flex-wrap gap-2 mb-3">{item.task_types.map((stats) => <TaskTypeChip key={stats.task_type} stats={stats} />)}</div>
           {item.audio_url && (
             <audio src={item.audio_url} controls className="w-100 mb-3" />
           )}
@@ -385,7 +392,7 @@ function DataDetailPanel({
 
       <Modal show={!!reject} onHide={() => setReject(null)} centered>
         <Modal.Header closeButton>
-          <Modal.Title>Lý do reject</Modal.Title>
+          <Modal.Title>Lý do từ chối</Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <Form.Label className="text-muted small">
@@ -471,10 +478,10 @@ function DetailGroup({
                   {ann.review_status === "pending" ? (
                     <>
                       <Button size="sm" variant="success" onClick={() => onApprove(ann.id)} disabled={busyAnn !== null}>
-                        {busyAnn === ann.id ? <Spinner size="sm" animation="border" /> : <><i className="bi bi-check2"></i> Approve</>}
+                        {busyAnn === ann.id ? <Spinner size="sm" animation="border" /> : <><i className="bi bi-check2"></i> Duyệt</>}
                       </Button>
                       <Button size="sm" variant="outline-danger" onClick={() => onReject(ann.id)} disabled={busyAnn !== null}>
-                        <i className="bi bi-x-lg"></i> Reject
+                        <i className="bi bi-x-lg"></i> Từ chối
                       </Button>
                     </>
                   ) : (

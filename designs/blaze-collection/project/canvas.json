@@ -1,0 +1,88 @@
+{
+  "v": 3,
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-11-03T00:00:00Z"
+  },
+  "title": "Blaze Collection — Frontend UI",
+  "launch": {
+    "view": "canvas"
+  },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 960,
+      "expand": "fill",
+      "title": "Tổng quan đóng góp · Desktop"
+    },
+    "Login.dc.html": {
+      "x": 1520,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Đăng nhập · Mobile"
+    },
+    "Landing.dc.html": {
+      "x": 0,
+      "y": 1080,
+      "w": 1440,
+      "h": 1120,
+      "expand": "fill",
+      "title": "Trang chủ · Desktop"
+    },
+    "Contribution.dc.html": {
+      "x": 1520,
+      "y": 1080,
+      "w": 390,
+      "h": 844,
+      "title": "Góp từ / câu · Mobile"
+    },
+    "Review.dc.html": {
+      "x": 0,
+      "y": 2320,
+      "w": 1440,
+      "h": 1100,
+      "expand": "fill",
+      "title": "Đánh giá độc lập · Desktop"
+    },
+    "Release.dc.html": {
+      "x": 1520,
+      "y": 2320,
+      "w": 1440,
+      "h": 1100,
+      "expand": "fill",
+      "title": "Xem trước bản xuất · Desktop"
+    },
+    "Game.dc.html": {
+      "x": 0,
+      "y": 3540,
+      "w": 1440,
+      "h": 1000,
+      "expand": "fill",
+      "title": "Game 10 câu · Người chơi"
+    },
+    "GameAdmin.dc.html": {
+      "x": 1520,
+      "y": 3540,
+      "w": 1440,
+      "h": 1000,
+      "expand": "fill",
+      "title": "Quản trị game · Đề và lượt chơi"
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Login.dc.html",
+    "Landing.dc.html",
+    "Contribution.dc.html",
+    "Review.dc.html",
+    "Release.dc.html",
+    "Game.dc.html",
+    "GameAdmin.dc.html"
+  ],
+  "notes": {},
+  "designSystems": []
+}

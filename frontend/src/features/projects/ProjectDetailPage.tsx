@@ -203,6 +203,7 @@ export function ProjectDetailPage() {
         )
       ) : (
         <Tab.Container activeKey={activeTab} onSelect={(k) => k && setActiveTab(k as TabKey)}>
+          <nav className="project-filter-tabs mb-4" aria-label="Các khu vực dự án">{(project.kind === "collect" ? COLLECT_TABS : ANNOTATE_TABS).map(tab => <button type="button" className="project-filter-tab" key={tab.key} aria-pressed={activeTab === tab.key} onClick={() => setActiveTab(tab.key)}>{tab.label}</button>)}</nav>
           <div className="project-tabs-content">
         <Tab.Content>
           <Tab.Pane eventKey="config">

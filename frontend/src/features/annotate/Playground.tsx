@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button, Form, Alert, Spinner } from "react-bootstrap";
-import { Link, useSearchParams } from "react-router-dom";
+import { Button, Form, Alert, Spinner, Modal } from "react-bootstrap";
+import { Link, useSearchParams, useBlocker } from "react-router-dom";
 import { annotateApi } from "../../api/annotate";
 import { reviewApi } from "../../api/review";
 import { extractError } from "../../api/client";
@@ -9,11 +9,9 @@ import { AudioPlayer, type AudioPlayerHandle } from "./AudioPlayer";
 import { ReportModal } from "./ReportModal";
 import { GuidelineOffcanvas } from "./GuidelineOffcanvas";
 import { VoiceRecordCard } from "./VoiceRecordCard";
-import { ScoreBurst } from "../../components/ScoreBurst";
-import { playCoinSound, playMilestoneSound } from "../../lib/sound";
 import { ANNOTATE_MODES, type ModeKey } from "./modes";
 
-const COMBO_WINDOW_MS = 30_000;
+import { useAuth } from "../auth/AuthContext";
 
 interface PlaygroundProps {
   /** Khi có projectId → dùng /projects/:id/next-task; khi null → /me/next-task (random global). */
@@ -41,33 +39,23 @@ export function Playground({ projectId, emptyExtra }: PlaygroundProps) {
   const playerRef = useRef<AudioPlayerHandle>(null);
   const taskStartRef = useRef<number>(Date.now());
 
-  const [burstKey, setBurstKey] = useState(0);
-  const [burstPoints, setBurstPoints] = useState(0);
-  const [burstCombo, setBurstCombo] = useState(1);
-  const comboRef = useRef({ count: 0, lastAt: 0 });
-
-  const triggerScoreBurst = () => {
-    if (!task?.task_type || !task.project) return;
-    const pts = task.project.scoring?.[task.task_type] ?? 0;
-    if (pts <= 0) return;
-
-    const now = Date.now();
-    const inWindow = now - comboRef.current.lastAt < COMBO_WINDOW_MS;
-    const nextCombo = inWindow ? comboRef.current.count + 1 : 1;
-    comboRef.current = { count: nextCombo, lastAt: now };
-
-    setBurstPoints(pts);
-    setBurstCombo(nextCombo);
-    setBurstKey((k) => k + 1);
-
-    // Milestone chord ở các mốc tròn (5, 10, 15, ...) — đè lên coin sound
-    if (nextCombo >= 5 && nextCombo % 5 === 0) playMilestoneSound();
-    else playCoinSound(nextCombo);
-  };
-
-  const resetCombo = () => {
-    comboRef.current = { count: 0, lastAt: 0 };
-  };
+  const { user } = useAuth();
+  const [submissionMessage, setSubmissionMessage] = useState<string | null>(null);
+  const [draftNotice, setDraftNotice] = useState<string | null>(null);
+  const draftKey = task?.assignment_id && user ? `collection.task-draft.v1.${user.id}.${task.assignment_id}` : null;
+  const dirty = !!task?.has_task && (text !== (task.task_type === "audio_label" ? String(task.payload.prelabel ?? "") : "") || verdict !== null || option !== null);
+  const blocker = useBlocker(dirty && !submitting);
+  useEffect(() => {
+    if (!dirty || submitting) return;
+    const handler = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [dirty, submitting]);
+  useEffect(() => {
+    if (!draftKey || !task?.expires_at || !dirty) return;
+    try { localStorage.setItem(draftKey, JSON.stringify({ taskId: task.task_id, expires: task.expires_at, text, verdict, option })); }
+    catch { /* Answer stays in memory; storage may be unavailable. */ }
+  }, [draftKey, task, text, verdict, option, dirty]);
 
   const resetForTask = useCallback((t: NextTaskResponse) => {
     if (t.task_type === "audio_label") {
@@ -80,8 +68,22 @@ export function Playground({ projectId, emptyExtra }: PlaygroundProps) {
     }
     setVerdict(null);
     setOption(null);
+    setDraftNotice(null);
+    if (user && t.assignment_id && t.expires_at && Date.parse(t.expires_at + (/Z$|[+-]\d\d:\d\d$/.test(t.expires_at) ? "" : "Z")) > Date.now()) {
+      const key = `collection.task-draft.v1.${user.id}.${t.assignment_id}`;
+      try {
+        const saved = JSON.parse(localStorage.getItem(key) ?? "null");
+        if (saved?.taskId === t.task_id && saved.expires === t.expires_at) {
+          setText(typeof saved.text === "string" ? saved.text : "");
+          setVerdict(saved.verdict === "correct" || saved.verdict === "incorrect" ? saved.verdict : null);
+          setOption(typeof saved.option === "string" ? saved.option : null);
+          setEditing(true);
+          setDraftNotice("Đã khôi phục bản nháp của nhiệm vụ này. Bản nháp chưa được gửi.");
+        }
+      } catch { /* Invalid drafts are never submitted automatically. */ }
+    }
     taskStartRef.current = Date.now();
-  }, []);
+  }, [user]);
 
   const fetchNext = useCallback(async () => {
     setLoading(true);
@@ -131,7 +133,6 @@ export function Playground({ projectId, emptyExtra }: PlaygroundProps) {
     if (!answer) return;
     setSubmitting(true);
     setError(null);
-    triggerScoreBurst();
     try {
       await annotateApi.submit(task.assignment_id, {
         answer,
@@ -139,10 +140,12 @@ export function Playground({ projectId, emptyExtra }: PlaygroundProps) {
         audio_listened_sec: playerRef.current?.getListenedSec(),
         audio_play_count: playerRef.current?.getPlayCount(),
       });
+      if (draftKey) { try { localStorage.removeItem(draftKey); } catch { /* optional storage */ } }
+      setSubmissionMessage("Đã gửi thành công. Đóng góp đang chờ kiểm duyệt; điểm chưa được xác nhận.");
       setPendingCount((c) => c + 1);
       await fetchNext();
     } catch (e) {
-      setError(extractError(e, "Submit thất bại"));
+      setError(extractError(e, "Gửi đóng góp thất bại"));
     } finally {
       setSubmitting(false);
     }
@@ -150,13 +153,13 @@ export function Playground({ projectId, emptyExtra }: PlaygroundProps) {
 
   const handleSkip = async () => {
     if (!task?.assignment_id) return;
-    resetCombo();
     setSubmitting(true);
     try {
       await annotateApi.skip(task.assignment_id);
+      if (draftKey) { try { localStorage.removeItem(draftKey); } catch { /* optional storage */ } }
       await fetchNext();
     } catch (e) {
-      setError(extractError(e, "Skip thất bại"));
+      setError(extractError(e, "Chưa thể bỏ qua nhiệm vụ"));
     } finally {
       setSubmitting(false);
     }
@@ -169,11 +172,13 @@ export function Playground({ projectId, emptyExtra }: PlaygroundProps) {
   }
 
   // Coi là "hết task" nếu API trả has_task=false hoặc trả task nhưng thiếu audio_url
-  const noTask = !task?.has_task || !task?.audio_url;
+  if (error && !task) return <Alert variant="danger" role="alert"><p>{error}</p><Button variant="outline-danger" onClick={() => void fetchNext()}>Thử lại</Button></Alert>;
+  const noTask = !task?.has_task || (task.task_type !== "qa" && !task.audio_url);
   if (noTask) {
     const modeLabel = ANNOTATE_MODES.find((m) => m.key === mode)?.label;
     return (
       <>
+        {submissionMessage && <Alert variant="success">{submissionMessage}</Alert>}
         <div className="empty-state-wrap">
           <div className="empty-state-figure">
             <i className="bi bi-check2"></i>
@@ -220,13 +225,14 @@ export function Playground({ projectId, emptyExtra }: PlaygroundProps) {
     if (!task?.assignment_id) return;
     setSubmitting(true);
     setError(null);
-    triggerScoreBurst();
     try {
       await annotateApi.submitVoice(task.assignment_id, blob, signals);
+      if (draftKey) { try { localStorage.removeItem(draftKey); } catch { /* optional storage */ } }
+      setSubmissionMessage("Đã gửi thành công. Đóng góp đang chờ kiểm duyệt; điểm chưa được xác nhận.");
       setPendingCount((c) => c + 1);
       await fetchNext();
     } catch (e) {
-      setError(extractError(e, "Submit voice thất bại"));
+      setError(extractError(e, "Gửi ghi âm thất bại"));
     } finally {
       setSubmitting(false);
     }
@@ -234,7 +240,9 @@ export function Playground({ projectId, emptyExtra }: PlaygroundProps) {
 
   return (
     <>
-      <ScoreBurst trigger={burstKey} points={burstPoints} combo={burstCombo} />
+      {submissionMessage && <Alert variant="success" role="status" dismissible onClose={() => setSubmissionMessage(null)}>{submissionMessage}</Alert>}
+      {draftNotice && <Alert variant="info">{draftNotice} <button className="btn btn-sm btn-outline-secondary" onClick={() => { if (draftKey) localStorage.removeItem(draftKey); setText(task?.task_type === "audio_label" ? String(task.payload.prelabel ?? "") : ""); setVerdict(null); setOption(null); setDraftNotice(null); }}>Bỏ bản nháp</button></Alert>}
+      <Modal show={blocker.state === "blocked"} onHide={() => blocker.state === "blocked" && blocker.reset()} centered><Modal.Header closeButton><Modal.Title>Nội dung chưa gửi</Modal.Title></Modal.Header><Modal.Body>Bản nháp văn bản được giữ trên trình duyệt này nếu bộ nhớ khả dụng. Bản ghi âm chưa gửi không được lưu khi rời trang.</Modal.Body><Modal.Footer><Button variant="outline-secondary" onClick={() => blocker.state === "blocked" && blocker.reset()}>Tiếp tục làm</Button><Button onClick={() => blocker.state === "blocked" && blocker.proceed()}>Rời trang</Button></Modal.Footer></Modal>
       {error && <Alert variant="danger" className="py-2" onClose={() => setError(null)} dismissible>{error}</Alert>}
 
 

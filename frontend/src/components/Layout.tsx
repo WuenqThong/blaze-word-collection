@@ -1,220 +1,124 @@
-import { useEffect, useState } from "react";
-import { Outlet, Link, NavLink, useNavigate, useLocation } from "react-router-dom";
-import { Navbar, Container, Button, Dropdown, Nav, Offcanvas } from "react-bootstrap";
+import { useState } from "react";
+import { Outlet, Link, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Alert, Dropdown, Offcanvas } from "react-bootstrap";
 import { useAuth } from "../features/auth/AuthContext";
-import { WalletButton } from "./WalletButton";
-import { ANNOTATE_MODES } from "../features/annotate/modes";
 
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(-2)
-    .map((p) => p[0]?.toUpperCase() ?? "")
-    .join("") || "U";
+
+import { Brand } from "./Brand";
+import { pageTitle, roleLabel } from "../features/dialect/navigation";
+
+function initials(name: string) {
+  return name.split(/\s+/).filter(Boolean).slice(-2).map((part) => part[0]).join("");
 }
 
 export function Layout() {
-  const { user, loading, logout } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
-  const [navOpen, setNavOpen] = useState(false);
+  const { pathname } = useLocation();
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem("collection.sidebar.collapsed") === "true"; } catch { return false; }
+  });
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const isAdmin = user?.role === "admin";
 
-  useEffect(() => {
-    setNavOpen(false);
-  }, [location.pathname, location.search]);
+  const title = pageTitle(pathname);
 
-  const onDashboard = location.pathname === "/dashboard";
-  const currentMode = new URLSearchParams(location.search).get("mode") ?? "";
+  function toggleSidebar() {
+    const next = !collapsed;
+    setCollapsed(next);
+    try { localStorage.setItem("collection.sidebar.collapsed", String(next)); } catch { /* optional preference */ }
+  }
 
-  const handleLogout = async () => {
-    setNavOpen(false);
-    await logout();
-    navigate("/login", { replace: true });
+  async function handleLogout() {
+    setLoggingOut(true);
+    setLogoutError(null);
+    try {
+      await logout();
+      setMobileOpen(false);
+      navigate("/login", { replace: true });
+    } catch { setLogoutError("Không thể đăng xuất. Vui lòng thử lại."); }
+    finally { setLoggingOut(false); }
+  }
+
+  const navigation = (compact: boolean) => {
+    const item = (to: string, icon: string, label: string, active?: boolean) => (
+      <NavLink key={to} to={to} end={to === "/dashboard" || to === "/roleplay"}
+        onClick={() => setMobileOpen(false)} title={compact ? label : undefined}
+        aria-current={active === false ? "false" : undefined}
+        aria-label={compact ? label : undefined}
+        className={({ isActive }) => `workspace-nav-link ${(active ?? isActive) ? "is-active" : ""}`}>
+        <i className={`bi ${icon}`} aria-hidden="true" /><span>{label}</span>
+      </NavLink>
+    );
+    return <>
+      <div className="workspace-nav-caption">Không gian dữ liệu</div>
+      {item("/dashboard", "bi-grid", "Tổng quan")}
+      {item("/contribute/new", "bi-plus-square", "Góp từ / câu")}
+      {item("/my/contributions", "bi-journal-text", "Đóng góp của tôi")}
+      {(isAdmin || user?.role === "reviewer") && item("/review", "bi-clipboard-check", "Đánh giá độc lập")}
+      {isAdmin && <><div className="workspace-nav-caption">Điều phối</div>
+        {item("/admin/contributions", "bi-collection", "Mẫu đóng góp")}
+        {item("/admin/disputes", "bi-intersect", "Xử lý bất đồng")}
+        {item("/admin/sources", "bi-link-45deg", "Nguồn & quyền sử dụng")}
+        {item("/admin/participants", "bi-people", "Người tham gia")}
+        {item("/admin/datasets", "bi-database", "Bản xuất dữ liệu")}
+      </>}
+      <div className="workspace-nav-caption">Tham khảo</div>
+      {item("/about-data", "bi-info-circle", "Hướng dẫn đóng góp")}
+      {isAdmin && item("/legacy", "bi-archive", "Công cụ cũ")}
+    </>;
   };
 
-  const fullBleed = location.pathname.startsWith("/admin/review");
+  return <div className={`collection-workspace ${collapsed ? "sidebar-collapsed" : ""}`}>
+    <a href="#workspace-main" className="skip-navigation">Bỏ qua điều hướng</a>
+    <aside className="workspace-sidebar" aria-label="Thanh bên">
+      <div className="workspace-brand-row">{collapsed ? <Link className="compact-brand" to="/dashboard" aria-label="Blaze — Tổng quan"><img className="collection-logo" src="/brand/blaze-logo.png" width="36" height="36" alt="" /></Link> : <Brand />}</div>
+      <nav className="workspace-navigation" aria-label="Điều hướng chính">{navigation(collapsed)}</nav>
+      <div className="workspace-sidebar-footer">
+        <NavLink to="/settings" className={({ isActive }) => `workspace-nav-link ${isActive ? "is-active" : ""}`} title={collapsed ? "Cài đặt" : undefined} aria-label={collapsed ? "Cài đặt" : undefined}>
+          <i className="bi bi-geo-alt" aria-hidden="true" /><span>Hồ sơ vùng sử dụng</span>
+        </NavLink>
+        <button type="button" onClick={toggleSidebar} className="workspace-nav-link sidebar-toggle" aria-expanded={!collapsed} aria-label={collapsed ? "Mở rộng thanh bên" : "Thu gọn thanh bên"}>
+          <i className={`bi bi-layout-sidebar${collapsed ? "-inset" : ""}`} aria-hidden="true" /><span>Thu gọn thanh bên</span>
+        </button>
+        {!collapsed && <div className="workspace-sidebar-note">Blaze <span>Không gian dữ liệu</span></div>}
+      </div>
+    </aside>
+    <div className="workspace-panel">
+      <header className="workspace-header">
+        <div className="workspace-header-heading">
+          <button className="workspace-icon-button mobile-menu-toggle" type="button" aria-label="Mở menu điều hướng" onClick={() => setMobileOpen(true)}><i className="bi bi-list" aria-hidden="true" /></button>
+          <span className="workspace-breadcrumb">Không gian làm việc <i className="bi bi-chevron-right" aria-hidden="true" /></span>
+          <span className="workspace-page-title">{title}</span>
+        </div>
+        <div className="workspace-header-actions">
 
-  return (
-    <div className="min-vh-100 d-flex flex-column">
-      <Navbar expand="md" expanded={navOpen} onToggle={setNavOpen} className="app-navbar sticky-top">
-        <Container fluid>
-          <Navbar.Brand as={Link} to="/">
-            <span className="brand-mark"><i className="bi bi-soundwave"></i></span>
-            <span className="brand-text">Audio Annotator</span>
-          </Navbar.Brand>
-
-          <div className="ms-auto d-flex align-items-center gap-2 order-md-last">
-            {loading ? (
-              <div className="user-menu-skeleton" aria-hidden="true">
-                <span className="skeleton-avatar" />
-                <span className="skeleton-line d-none d-sm-inline" />
-              </div>
-            ) : user ? (
-              <>
-              {user.role !== "admin" && <WalletButton />}
-              <Dropdown align="end" className="d-none d-md-block">
-                <Dropdown.Toggle id="user-menu" className="user-menu-toggle" variant="">
-                  <span className="user-avatar">{initials(user.full_name)}</span>
-                  <span className="d-none d-sm-inline user-name">{user.full_name}</span>
-                  <span className="role-chip d-none d-sm-inline">{user.role}</span>
-                </Dropdown.Toggle>
-                <Dropdown.Menu className="user-menu">
-                  <Dropdown.Header>
-                    <div className="small text-muted">Đã đăng nhập với</div>
-                    <div className="text-truncate fw-semibold" style={{ maxWidth: 220 }}>{user.email}</div>
-                  </Dropdown.Header>
-                  <Dropdown.Divider />
-                  {user.role !== "admin" && (
-                    <>
-                      <Dropdown.Item as={Link} to="/rewards"><i className="bi bi-coin"></i>Điểm thưởng</Dropdown.Item>
-                      <Dropdown.Item as={Link} to="/history"><i className="bi bi-clock-history"></i>Lịch sử</Dropdown.Item>
-                      <Dropdown.Divider />
-                    </>
-                  )}
-                  <Dropdown.Item as={Link} to="/settings"><i className="bi bi-gear"></i>Cài đặt</Dropdown.Item>
-                  <Dropdown.Divider />
-                  <Dropdown.Item onClick={handleLogout} className="text-danger">
-                    <i className="bi bi-box-arrow-right"></i>Đăng xuất
-                  </Dropdown.Item>
-                </Dropdown.Menu>
-              </Dropdown>
-              </>
-            ) : (
-              <>
-                <Link to="/login" className="btn btn-sm btn-outline-primary">Đăng nhập</Link>
-                <Link to="/register"><Button size="sm" variant="primary">Đăng ký</Button></Link>
-              </>
-            )}
-          </div>
-
-          {user && <Navbar.Toggle aria-controls="main-nav" />}
-
-          {user && (
-            <Navbar.Offcanvas
-              id="main-nav"
-              aria-labelledby="main-nav-label"
-              placement="bottom"
-              className="app-navbar-offcanvas"
-            >
-              <Offcanvas.Header closeButton className="d-md-none">
-                <Offcanvas.Title id="main-nav-label" className="d-flex align-items-center gap-2">
-                  <span className="user-avatar">{initials(user.full_name)}</span>
-                  <div className="min-w-0">
-                    <div className="fw-semibold text-truncate">{user.full_name}</div>
-                    <div className="small text-muted text-truncate">{user.email}</div>
-                  </div>
-                </Offcanvas.Title>
-              </Offcanvas.Header>
-              <Offcanvas.Body>
-                <Nav className="app-nav me-auto">
-                  {user.role === "admin" ? (
-                    <>
-                      <NavLink to="/dashboard" className="nav-link" end>
-                        <i className="bi bi-grid-1x2"></i>
-                        <span>Tổng quan</span>
-                      </NavLink>
-                      <NavLink to="/projects" className="nav-link">
-                        <i className="bi bi-folder2"></i>
-                        <span>Project</span>
-                      </NavLink>
-                      <span className="nav-divider" aria-hidden="true" />
-                      <NavLink to="/admin/review" className="nav-link nav-link-admin">
-                        <i className="bi bi-clipboard-check"></i>
-                        <span>Review</span>
-                      </NavLink>
-                      <NavLink to="/admin/flagged" className="nav-link nav-link-admin">
-                        <i className="bi bi-shield-exclamation"></i>
-                        <span>Tài khoản bất thường</span>
-                      </NavLink>
-                      <NavLink to="/admin/withdrawals" className="nav-link nav-link-admin">
-                        <i className="bi bi-cash-coin"></i>
-                        <span>Rút tiền</span>
-                      </NavLink>
-                      <NavLink to="/admin/reports" className="nav-link nav-link-admin">
-                        <i className="bi bi-flag"></i>
-                        <span>Báo cáo</span>
-                      </NavLink>
-                    </>
-                  ) : (
-                    <>
-                      <Dropdown as="div" className="annotate-mode-dropdown">
-                        <Dropdown.Toggle
-                          as="button"
-                          type="button"
-                          className={`nav-link annotate-mode-toggle ${onDashboard ? "active" : ""}`}
-                          id="annotate-mode-toggle"
-                        >
-                          <i className="bi bi-tag"></i>
-                          <span>Gắn nhãn</span>
-                          <i className="bi bi-caret-down-fill annotate-mode-caret"></i>
-                        </Dropdown.Toggle>
-                        <Dropdown.Menu className="annotate-mode-menu">
-                          {ANNOTATE_MODES.map((m) => (
-                            <Dropdown.Item
-                              key={m.key || "random"}
-                              as={Link}
-                              to={`/dashboard${m.key ? `?mode=${m.key}` : ""}`}
-                              active={onDashboard && currentMode === m.key}
-                            >
-                              <i className={`bi ${m.icon}`}></i>
-                              <span>{m.label}</span>
-                            </Dropdown.Item>
-                          ))}
-                          <Dropdown.Divider />
-                          <Dropdown.Item as={Link} to="/roleplay" active={location.pathname.startsWith("/roleplay")}>
-                            <i className="bi bi-mic-fill"></i>
-                            <span>Role play</span>
-                          </Dropdown.Item>
-                        </Dropdown.Menu>
-                      </Dropdown>
-                      <NavLink to="/projects" className="nav-link">
-                        <i className="bi bi-folder2"></i>
-                        <span>Dự án</span>
-                      </NavLink>
-                    </>
-                  )}
-                </Nav>
-
-                <div className="mobile-user-section d-md-none">
-                  <Nav className="flex-column app-nav">
-                    {user.role !== "admin" && (
-                      <>
-                        <NavLink to="/rewards" className="nav-link">
-                          <i className="bi bi-coin"></i>
-                          <span>Điểm thưởng</span>
-                        </NavLink>
-                        <NavLink to="/history" className="nav-link">
-                          <i className="bi bi-clock-history"></i>
-                          <span>Lịch sử</span>
-                        </NavLink>
-                      </>
-                    )}
-                    <NavLink to="/settings" className="nav-link">
-                      <i className="bi bi-gear"></i>
-                      <span>Cài đặt</span>
-                    </NavLink>
-                    <button type="button" onClick={handleLogout} className="nav-link nav-link-danger text-start">
-                      <i className="bi bi-box-arrow-right"></i>
-                      <span>Đăng xuất</span>
-                    </button>
-                  </Nav>
-                </div>
-              </Offcanvas.Body>
-            </Navbar.Offcanvas>
-          )}
-        </Container>
-      </Navbar>
-
-      <main className="flex-grow-1">
-        {fullBleed ? (
-          <Outlet />
-        ) : (
-          <Container className="py-4 py-md-5">
-            <Outlet />
-          </Container>
-        )}
+          {user ? <Dropdown align="end">
+            <Dropdown.Toggle variant="" className="workspace-account" id="workspace-account">
+              <span className="workspace-avatar">{initials(user.full_name)}</span>
+              <span className="workspace-account-copy"><strong>{user.full_name}</strong><small>{roleLabel(user.role)}</small></span>
+            </Dropdown.Toggle>
+            <Dropdown.Menu>
+              <Dropdown.Header className="workspace-email">{user.email}</Dropdown.Header>
+              <Dropdown.Item as={Link} to="/settings">Hồ sơ vùng sử dụng</Dropdown.Item>
+              <Dropdown.Divider />
+              <Dropdown.Item as="button" onClick={handleLogout} disabled={loggingOut} className="text-danger">{loggingOut ? "Đang đăng xuất…" : "Đăng xuất"}</Dropdown.Item>
+            </Dropdown.Menu>
+          </Dropdown> : <Link to="/login" className="btn btn-primary">Đăng nhập</Link>}
+        </div>
+      </header>
+      <main id="workspace-main" tabIndex={-1} className={`workspace-main ${pathname.startsWith("/admin/review") ? "workspace-main-review" : ""}`}>
+        {logoutError && <Alert variant="danger" dismissible onClose={() => setLogoutError(null)}>{logoutError}</Alert>}
+        <div className="workspace-page" key={pathname}><Outlet /></div>
       </main>
     </div>
-  );
+    <Offcanvas show={mobileOpen} onHide={() => setMobileOpen(false)} placement="start" className="workspace-mobile-drawer">
+      <Offcanvas.Header closeButton><Offcanvas.Title><Brand /></Offcanvas.Title></Offcanvas.Header>
+      <Offcanvas.Body><nav aria-label="Điều hướng di động">{navigation(false)}
+        <NavLink to="/settings" onClick={() => setMobileOpen(false)} className="workspace-nav-link"><i className="bi bi-geo-alt" aria-hidden="true" /><span>Hồ sơ vùng sử dụng</span></NavLink>
+      </nav></Offcanvas.Body>
+    </Offcanvas>
+  </div>;
 }

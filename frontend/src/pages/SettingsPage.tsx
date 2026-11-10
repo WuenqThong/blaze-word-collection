@@ -9,6 +9,7 @@ export function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   // form state
   const [phone, setPhone] = useState("");
@@ -26,7 +27,7 @@ export function SettingsPage() {
         setBankName(p.bank_name ?? ""); setBankNumber(p.bank_account_number ?? ""); setBankHolder(p.bank_account_holder ?? "");
       })
       .catch((e) => setError(extractError(e)));
-  }, []);
+  }, [attempt]);
 
   const save = async (payload: ProfileUpdatePayload) => {
     setSaving(true);
@@ -55,6 +56,7 @@ export function SettingsPage() {
   };
 
   if (!profile) {
+    if (error) return <Alert variant="danger" role="alert"><p>{error}</p><Button variant="outline-danger" onClick={() => { setError(null); setAttempt((v) => v + 1); }}>Thử lại</Button></Alert>;
     return <div className="text-center py-5"><Spinner animation="border" size="sm" /></div>;
   }
 

@@ -13,10 +13,13 @@ export function WalletButton() {
   const [open, setOpen] = useState(false);
   const [wallet, setWallet] = useState<WalletSummary | null>(null);
   const [items, setItems] = useState<Withdrawal[] | null>(null);
+  const [error, setError] = useState(false);
 
   const load = () => {
-    walletApi.getWallet().then(setWallet).catch(() => {});
-    walletApi.listMine().then((r) => setItems(r.items)).catch(() => {});
+    setError(false);
+    Promise.all([walletApi.getWallet(), walletApi.listMine()]).then(([summary, history]) => {
+      setWallet(summary); setItems(history.items);
+    }).catch(() => setError(true));
   };
 
   useEffect(() => { load(); }, []);
@@ -37,6 +40,7 @@ export function WalletButton() {
       </Dropdown.Toggle>
 
       <Dropdown.Menu className="wallet-menu">
+        {error ? <div className="p-3" role="alert"><p>Không tải được dữ liệu ví. Số dư chưa được cập nhật.</p><button className="btn btn-outline-primary" onClick={load}>Thử lại</button></div> : <>
         <div className="wallet-menu-head">
           <div className="wallet-menu-label">Số dư khả dụng</div>
           {wallet ? (
@@ -90,6 +94,7 @@ export function WalletButton() {
             Xem chi tiết & rút tiền
           </Link>
         </div>
+        </>}
       </Dropdown.Menu>
     </Dropdown>
   );

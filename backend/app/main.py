@@ -14,6 +14,8 @@ from app.routers import review as review_router
 from app.routers import roleplay as roleplay_router
 from app.routers import users as users_router
 from app.routers import wallet as wallet_router
+from app.routers import dialect as dialect_router
+from app.routers import dialect_workspace as dialect_workspace_router
 
 settings = get_settings()
 
@@ -41,6 +43,8 @@ app.include_router(audios_router.router, prefix="/api")
 app.include_router(annotate_router.router, prefix="/api")
 app.include_router(review_router.router, prefix="/api")
 app.include_router(wallet_router.router, prefix="/api")
+app.include_router(dialect_router.router, prefix="/api")
+app.include_router(dialect_workspace_router.router, prefix="/api")
 app.include_router(reports_router.router, prefix="/api")
 app.include_router(roleplay_router.router, prefix="/api")
 app.include_router(roleplay_router.project_router, prefix="/api")

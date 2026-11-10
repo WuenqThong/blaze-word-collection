@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Button } from "react-bootstrap";
 
 interface VoiceRecordCardProps {
   audioUrl: string;
@@ -174,6 +175,9 @@ export function VoiceRecordCard({ audioUrl, question, submitting, onSubmit, scor
       </div>
 
       <div className="verify-actions-row">
+        {audioUrl && <Button variant="outline-primary" onClick={togglePromptPlay} aria-label={promptPlaying ? "Tạm dừng âm thanh mẫu" : "Nghe âm thanh mẫu"}>
+          <i className={`bi bi-${promptPlaying ? "pause" : "play"}`} aria-hidden="true" />{promptPlaying ? "Tạm dừng" : "Nghe mẫu"}
+        </Button>}
         {state === "idle" && (
           <button
             type="button"

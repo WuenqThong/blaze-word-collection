@@ -327,7 +327,7 @@ export function DashboardPage() {
 
   // Annotator: trang chính chỉ là Playground (random task).
   // Lịch sử / Điểm thưởng đã chuyển lên navbar.
-  return <Playground />;
+  return <><div className="projects-heading"><div><div className="page-eyebrow">ĐÓNG GÓP DỮ LIỆU</div><h1>Không gian gán nhãn</h1><p>Nghe kỹ, ghi lại chính xác và cùng xây dựng dữ liệu chất lượng.</p></div><Link to="/projects" className="btn btn-outline-secondary"><i className="bi bi-folder2" aria-hidden="true" /> Xem dự án</Link></div><Playground /></>;
 }
 
 function AdminDashboard({ fullName }: { fullName: string }) {
@@ -357,7 +357,8 @@ function AdminDashboard({ fullName }: { fullName: string }) {
     <>
       <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
         <div>
-          <h3 className="mb-1">Xin chào, {fullName.split(" ").slice(-1)[0]} 👋</h3>
+          <div className="page-eyebrow">KHÔNG GIAN QUẢN TRỊ</div>
+          <h1 className="mb-2">Xin chào, {fullName.split(" ").slice(-1)[0]}</h1>
           <div className="d-flex align-items-center gap-2 text-muted small">
             <span>Tổng quan hệ thống gán nhãn</span>
             {refreshedAt && (
