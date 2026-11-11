@@ -8,7 +8,7 @@ export default defineConfig({
     host: true,
     port: 7777,
     strictPort: true,
-    proxy: { '/api': { target: 'http://127.0.0.1:8765', changeOrigin: true } },
+    proxy: { '/api': { target: process.env.BLAZE_API_TARGET || 'http://127.0.0.1:8765', changeOrigin: true } },
     watch: {
       usePolling: true,
       interval: 100,
