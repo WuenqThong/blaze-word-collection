@@ -1,8 +1,7 @@
 import { useState, type FormEvent } from "react";
-import { Form, Button, Alert, InputGroup } from "react-bootstrap";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "./AuthContext";
-import { AuthShell } from "./AuthShell";
+import { AuthField, AuthPasswordField, AuthShell, AuthSubmit } from "./AuthShell";
 import { extractError } from "../../api/client";
 import { returnPath } from "./returnPath";
 
@@ -15,7 +14,6 @@ export function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
-  const [showPwd, setShowPwd] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -36,54 +34,23 @@ export function RegisterPage() {
   };
 
   return (
-    <AuthShell>
-      <h1 className="auth-title">Tạo tài khoản</h1>
+    <AuthShell title="Tạo tài khoản Blaze" subtitle="Bắt đầu miễn phí chỉ trong vài giây."
+      footnote="Bằng việc đăng ký, bạn đồng ý với Điều khoản sử dụng và Chính sách quyền riêng tư của Blaze.">
+      {error && <div className="bz-auth-alert" role="alert">{error}</div>}
 
-      {error && <Alert variant="danger" className="py-2">{error}</Alert>}
+      <form className="bz-auth-form" onSubmit={handleSubmit} aria-busy={submitting}>
+        <AuthField id="register-name" label="Họ và tên" type="text" autoComplete="name" placeholder="Nguyễn Văn A"
+          value={fullName} required autoFocus onChange={(e) => setFullName(e.target.value)} />
+        <AuthField id="register-email" label="Email" type="email" autoComplete="email" placeholder="ban@congty.com"
+          value={email} required onChange={(e) => setEmail(e.target.value)} />
+        <AuthPasswordField id="register-password" label="Mật khẩu" autoComplete="new-password" placeholder="Tối thiểu 6 ký tự"
+          value={password} required minLength={6} onChange={(e) => setPassword(e.target.value)} />
+        <AuthPasswordField id="register-confirmation" label="Xác nhận mật khẩu" autoComplete="new-password" placeholder="Nhập lại mật khẩu"
+          value={confirmation} required minLength={6} onChange={(e) => setConfirmation(e.target.value)} />
+        <AuthSubmit busy={submitting} busyLabel="Đang tạo tài khoản...">Đăng ký</AuthSubmit>
+      </form>
 
-      <Form onSubmit={handleSubmit} aria-busy={submitting}>
-        <Form.Group className="mb-3" controlId="register-name">
-          <Form.Label>Họ và tên</Form.Label>
-          <InputGroup>
-            <InputGroup.Text className="bg-body"><i className="bi bi-person text-muted"></i></InputGroup.Text>
-            <Form.Control type="text" autoComplete="name" placeholder="Nguyễn Văn A" value={fullName} required
-              onChange={(e) => setFullName(e.target.value)} autoFocus />
-          </InputGroup>
-        </Form.Group>
-
-        <Form.Group className="mb-3" controlId="register-email">
-          <Form.Label>Email</Form.Label>
-          <InputGroup>
-            <InputGroup.Text className="bg-body"><i className="bi bi-envelope text-muted"></i></InputGroup.Text>
-            <Form.Control type="email" autoComplete="email" placeholder="ban@example.com" value={email} required
-              onChange={(e) => setEmail(e.target.value)} />
-          </InputGroup>
-        </Form.Group>
-
-        <Form.Group className="mb-3" controlId="register-password">
-          <Form.Label>Mật khẩu</Form.Label>
-          <InputGroup>
-            <InputGroup.Text className="bg-body"><i className="bi bi-lock text-muted"></i></InputGroup.Text>
-            <Form.Control type={showPwd ? "text" : "password"} autoComplete="new-password" placeholder="Tối thiểu 6 ký tự"
-              value={password} required minLength={6}
-              onChange={(e) => setPassword(e.target.value)} />
-            <Button variant="outline-secondary" type="button" aria-label={showPwd ? "Ẩn mật khẩu" : "Hiện mật khẩu"} aria-pressed={showPwd}
-              onClick={() => setShowPwd((v) => !v)}>
-              <i className={`bi bi-eye${showPwd ? "-slash" : ""}`}></i>
-            </Button>
-          </InputGroup>
-        </Form.Group>
-
-        <Form.Group className="mb-3" controlId="register-confirmation">
-          <Form.Label>Xác nhận mật khẩu</Form.Label>
-          <Form.Control type={showPwd ? "text" : "password"} autoComplete="new-password" value={confirmation} required minLength={6} placeholder="Nhập lại mật khẩu" onChange={(e) => setConfirmation(e.target.value)} />
-        </Form.Group>
-        <Button type="submit" variant="primary" className="w-100 mt-2" disabled={submitting}>
-          {submitting ? <><span className="spinner-border spinner-border-sm me-2"></span>Đang tạo tài khoản...</> : "Tạo tài khoản"}
-        </Button>
-      </Form>
-
-      <p className="text-center text-muted small mt-4 mb-0">
+      <p className="bz-auth-switch">
         Đã có tài khoản? <Link to="/login" state={location.state}>Đăng nhập</Link>
       </p>
     </AuthShell>

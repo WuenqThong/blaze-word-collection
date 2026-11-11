@@ -18,14 +18,14 @@ function fill(label: string, value: string) { fireEvent.change(screen.getByLabel
 describe("account forms", () => {
   it("rejects mismatching confirmation before calling registration API", async () => {
     open(true); fill("Họ và tên", "Người chơi"); fill("Email", "player@example.com"); fill("Mật khẩu", "secret123"); fill("Xác nhận mật khẩu", "different123");
-    fireEvent.click(screen.getByRole("button", { name: "Tạo tài khoản" }));
+    fireEvent.click(screen.getByRole("button", { name: "Đăng ký" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("chưa khớp");
     expect(auth.register).not.toHaveBeenCalled();
   });
   it("submits registration and returns to the public homepage", async () => {
     auth.register.mockResolvedValue(undefined); open(true);
     fill("Họ và tên", "Người chơi"); fill("Email", "player@example.com"); fill("Mật khẩu", "secret123"); fill("Xác nhận mật khẩu", "secret123");
-    fireEvent.click(screen.getByRole("button", { name: "Tạo tài khoản" }));
+    fireEvent.click(screen.getByRole("button", { name: "Đăng ký" }));
     expect(await screen.findByRole("heading", { name: "Trang chủ APP" })).toBeInTheDocument();
     expect(auth.register).toHaveBeenCalledWith({ full_name: "Người chơi", email: "player@example.com", password: "secret123" });
   });

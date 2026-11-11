@@ -90,8 +90,6 @@ body { background: var(--blaze-ground); }
   border-color: #a15c00;
   box-shadow: 0 0 0 3px rgb(161 92 0 / 12%);
 }
-.collection-auth { background: #f9f8f5; }
-.collection-auth-form { max-width: 400px; }
 .workspace-panel { border: 1px solid var(--blaze-line); box-shadow: none; }
 .workspace-sidebar { background: var(--blaze-ground); }
 .collection-wordmark { letter-spacing: -.015em; }
