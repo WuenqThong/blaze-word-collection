@@ -9,7 +9,7 @@ import { questionErrors } from "../src/features/demo/questionFormats";
 import { datasetPackId } from "../src/features/demo/datasetQuestions";
 import { demoRoute } from "../src/features/demo/routes";
 
-const consent = { ...consentDefault(), collect: true };
+const consent = { ...consentDefault(), collect: true, train: true };
 const ids = ["dataset1-daily", "dataset1-kitchen", "dataset1-context"];
 afterEach(cleanup);
 describe("dataset question pack", () => {
@@ -20,6 +20,7 @@ describe("dataset question pack", () => {
     await screen.findByRole("button", { name: "Bắt đầu chơi" }, { timeout: 10000 });
     expect(screen.queryByRole("combobox", { name: "Bộ đề 10 câu" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByLabelText(/Tiếp nhận & kiểm duyệt/));
+    fireEvent.click(screen.getByLabelText(/Cho phép sử dụng dữ liệu để huấn luyện/));
     fireEvent.click(screen.getByRole("button", { name: "Bắt đầu chơi" }));
     await screen.findByRole("heading", { name: "Q01 / 10" });
     const original = (await repository().load()).sessions[0];
@@ -100,11 +101,12 @@ describe("dataset question pack", () => {
     render(<RouterProvider router={router} />);
     await screen.findByRole("button", { name: "Bắt đầu chơi" }, { timeout: 10000 });
     fireEvent.click(screen.getByLabelText(/Tiếp nhận & kiểm duyệt/));
+    fireEvent.click(screen.getByLabelText(/Cho phép sử dụng dữ liệu để huấn luyện/));
     fireEvent.click(screen.getByRole("button", { name: "Bắt đầu chơi" }));
     for (let i = 0; i < 10; i++) {
       await screen.findByRole("heading", { name: `Q${String(i + 1).padStart(2, "0")} / 10` });
       const session = (await repository().load()).sessions.at(-1)!; const q = session.questions[i];
-      if (q.format === "choice") fireEvent.click(screen.getByRole("radio", { name: q.options![0].text }));
+      if (q.format === "choice") fireEvent.click(screen.getByRole("radio", { name: q.options!.find((o) => o.id === q.correctOptionId)!.text }));
       else {
         const standardAnswer = q.format !== "choice";
         if (standardAnswer) expect(screen.queryByLabelText("Đáp án của bạn")).not.toBeInTheDocument();

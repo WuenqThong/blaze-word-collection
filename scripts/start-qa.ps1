@@ -16,7 +16,7 @@ foreach ($port in @(8766, 7778)) {
     }
 }
 $names = @('BLAZE_QA_ROOT', 'DATABASE_URL', 'JWT_SECRET', 'COOKIE_NAME', 'CORS_ORIGINS',
-           'MINIO_BUCKET', 'BLAZE_API_TARGET', 'VITE_API_BASE_URL', 'VITE_DEMO_SERVER')
+           'MINIO_BUCKET', 'BLAZE_API_TARGET', 'VITE_API_BASE_URL', 'VITE_DEMO_SERVER', 'ENABLE_LEGACY', 'VITE_ENABLE_LEGACY')
 $previous = @{}
 foreach ($name in $names) { $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 $started = @()
@@ -30,6 +30,8 @@ try {
     $env:BLAZE_API_TARGET = 'http://127.0.0.1:8766'
     $env:VITE_API_BASE_URL = '/api'
     $env:VITE_DEMO_SERVER = 'on'
+    $env:ENABLE_LEGACY = 'false'
+    $env:VITE_ENABLE_LEGACY = 'off'
     Push-Location (Join-Path $projectRoot 'backend')
     try {
         & $python -m scripts.seed_qa

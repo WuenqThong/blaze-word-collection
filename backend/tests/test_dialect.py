@@ -67,7 +67,12 @@ class DialectFlowTest(unittest.TestCase):
         self.assertEqual(self.client.post("/api/dialect/releases").status_code, 409)
 
     def test_training_opt_out_is_excluded(self):
-        item, _ = self.create(train=False)
+        item, body = self.create()
+        refused = self.client.post('/api/dialect/contributions', json={**body, 'consent_train': False, 'idempotency_key': 'new-without-training'})
+        self.assertEqual(refused.status_code, 422)
+        response = self.client.post(f"/api/dialect/contributions/{item['id']}/consent", json={
+            'consent': {'collect': True, 'train': False, 'public': False, 'audio': False, 'version': 'dialect-2026-11-v1'}})
+        self.assertEqual(response.status_code, 200, response.text)
         self.review(item["id"])
         self.current = self.users[3]
         self.client.post(f"/api/dialect/sources/{item['source_id']}/rights", json={"rights_confirmed": True, "note": "Đủ quyền nguồn"})

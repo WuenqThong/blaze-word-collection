@@ -6,6 +6,7 @@ import { useAuth } from "../features/auth/AuthContext";
 
 import { Brand } from "./Brand";
 import { pageTitle, roleLabel } from "../features/dialect/navigation";
+import { LEGACY_ENABLED } from "../lib/pilotRoutes";
 
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(-2).map((part) => part[0]).join("");
@@ -67,7 +68,7 @@ export function Layout() {
       </>}
       <div className="workspace-nav-caption">Tham khảo</div>
       {item("/about-data", "bi-info-circle", "Hướng dẫn đóng góp")}
-      {isAdmin && item("/legacy", "bi-archive", "Công cụ cũ")}
+      {isAdmin && LEGACY_ENABLED && item("/legacy", "bi-archive", "Công cụ cũ")}
     </>;
   };
 

@@ -47,6 +47,10 @@ describe("player to admin integration using actual routes and IndexedDB", () => 
 
     await user.click(screen.getByLabelText(/Tiếp nhận & kiểm duyệt/));
     await user.click(start);
+    expect(screen.getByRole("alert")).toHaveTextContent(/huấn luyện/);
+    expect((await repository().load()).sessions).toHaveLength(0);
+    await user.click(screen.getByLabelText(/Cho phép sử dụng dữ liệu để huấn luyện/));
+    await user.click(start);
     await screen.findByRole("heading", { name: "Q01 / 10" });
     expect((await repository().load()).sessions).toHaveLength(1);
   });
@@ -65,6 +69,7 @@ describe("player to admin integration using actual routes and IndexedDB", () => 
     );
     await screen.findByRole("heading", { name: /Mười câu hỏi/ });
     await user.click(screen.getByLabelText(/Tiếp nhận & kiểm duyệt/));
+    await user.click(screen.getByLabelText(/Cho phép sử dụng dữ liệu để huấn luyện/));
     await user.click(
       screen.getByRole("button", { name: /Bắt đầu chơi/ }),
     );

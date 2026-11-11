@@ -10,7 +10,7 @@ import { Modal } from "react-bootstrap";
 import { errorMessage } from "../../api/client";
 import { useDemo } from "./context";
 import { blankAnswer, canAdvance, isAnswered, uid, gameAllocation } from "./domain";
-import { consentDefault } from "./seed";
+import { consentDefault, gateCount } from "./seed";
 import { Action, Field, Heading, Panel, Status } from "./ui";
 import type { Answer, Consent, Session } from "./types";
 import { formatLabels } from "./questionFormats";
@@ -31,7 +31,7 @@ export function ConsentFields({
       {(
         [
           ["collect", "Tiếp nhận & kiểm duyệt (bắt buộc)"],
-          ["train", "Cho phép sử dụng dữ liệu để huấn luyện "],
+          ["train", "Cho phép sử dụng dữ liệu để huấn luyện (bắt buộc)"],
           ["public", "Cho phép công khai dữ liệu"],
         ] as const
       ).map(([k, label]) => (
@@ -39,6 +39,7 @@ export function ConsentFields({
           <input
             type="checkbox"
             checked={value[k]}
+            aria-required={k !== "public"}
             onChange={(e) => onChange({ ...value, [k]: e.target.checked })}
           />
           {label}
@@ -72,7 +73,7 @@ export function StartGame() {
           {pending && <p className="demo-note">Bạn có một lượt chưa hoàn thành. Bấm tiếp tục để quay lại câu đang làm.</p>}
           <p>
             {selected?.layout === "sourced2"
-              ? "Câu 1–2: Làm quen với từ đã có nguồn · Câu 3–8: Xác nhận hoặc sửa từ, câu chưa kiểm chứng · Câu 9–10: Đóng góp từ và câu mới."
+              ? "Câu 1–2: Trả lời đúng cả hai câu để mở phần tiếp theo · Câu 3–8: Xác nhận hoặc sửa từ, câu chưa kiểm chứng · Câu 9–10: Đóng góp từ và câu mới."
               : "Câu 1–3: Làm quen · Câu 4–5: Giải thích ý nghĩa từ ngữ · Câu 6 và 8: Kiểm tra kiến thức · Câu 7: Diễn đạt bằng tiếng phổ thông · Câu 9–10: Đóng góp từ và câu mới."}
           </p>
           <form
@@ -86,6 +87,10 @@ export function StartGame() {
               }
               if (!consent.collect) {
                 setError("Hãy tích chọn ‘Tiếp nhận & kiểm duyệt (bắt buộc)’ để bắt đầu chơi 10 câu.");
+                return;
+              }
+              if (!consent.train) {
+                setError("Hãy tích chọn cho phép sử dụng dữ liệu để huấn luyện để bắt đầu chơi.");
                 return;
               }
               if (campaign && !campaign.active) {
@@ -118,9 +123,9 @@ export function StartGame() {
               </p>
             )}
             {!pending && <ConsentFields value={consent} onChange={setConsent} />}
-            {!pending && !consent.collect && !!selected && (
+            {!pending && (!consent.collect || !consent.train) && !!selected && (
               <p className="demo-note" id="demo-consent-hint">
-                Để bắt đầu, hãy tích ô “Tiếp nhận & kiểm duyệt (bắt buộc)” phía trên.
+                Để bắt đầu, hãy tích hai ô bắt buộc: tiếp nhận & kiểm duyệt và cho phép huấn luyện. Công khai dữ liệu là tùy chọn.
               </p>
             )}
             {error && (
@@ -132,7 +137,7 @@ export function StartGame() {
               type="submit"
               className="btn btn-primary"
               disabled={(!pending && !selected) || starting}
-              aria-describedby={!pending && !consent.collect && selected ? "demo-consent-hint" : undefined}
+              aria-describedby={!pending && (!consent.collect || !consent.train) && selected ? "demo-consent-hint" : undefined}
             >
               {starting ? "Đang tạo phiên…" : pending ? "Tiếp tục chơi" : "Bắt đầu chơi"}{" "}
               <i className="bi bi-arrow-right" aria-hidden="true" />
@@ -370,7 +375,7 @@ function QuestionForm({
       const x = result.sessions.find((x) => x.id === session.id)!;
       if (x.cursor === index)
         notify(
-          "Chưa đạt đủ 3/3 để mở Q04. Bạn có thể sửa ba câu đầu hoặc đề xuất biến thể; đáp án và lần thử đã được lưu.",
+          `Chưa trả lời đúng đủ ${gateCount(session.exam)} câu đầu. Bạn có thể sửa đáp án; các lần thử đã được lưu.`,
         );
       else notify("");
     } catch (e) {

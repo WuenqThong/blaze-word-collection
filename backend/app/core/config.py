@@ -7,6 +7,7 @@ class Settings(BaseSettings):
 
     app_name: str = "Audio Annotator"
     debug: bool = True
+    enable_legacy: bool = False
 
     database_url: str = "sqlite:///./annotator.db"
 

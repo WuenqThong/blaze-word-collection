@@ -13,7 +13,8 @@ import { ErrorPage } from "./pages/ErrorPage";
 import { ReviewerRoute } from "./components/ReviewerRoute";
 import { AuthProvider } from "./features/auth/AuthContext";
 import { demoRoute } from "./features/demo/routes";
-export const router = createBrowserRouter([
+import { pilotRoutes } from "./lib/pilotRoutes";
+export const router = createBrowserRouter(pilotRoutes([
   // Auth pages full-screen, không dùng Layout
   { path: "/login", element: <AuthProvider><LoginPage /></AuthProvider> },
   { path: "/register", element: <AuthProvider><RegisterPage /></AuthProvider> },
@@ -70,4 +71,4 @@ export const router = createBrowserRouter([
       { path: "*", element: <ErrorPage /> },
     ],
   },
-]);
+]));

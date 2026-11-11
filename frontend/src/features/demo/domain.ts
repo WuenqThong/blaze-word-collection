@@ -305,6 +305,7 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
       const e = command.type === "start" ? s.exams.find((e) => e.id === command.examId) : allocation?.exam;
       assert(e?.status === "active", "Bộ đề chưa mở hoặc đã đóng.");
       assert(command.consent.collect, "Cần đồng ý tiếp nhận.");
+      assert(command.consent.train, "Cần đồng ý sử dụng dữ liệu để huấn luyện.");
       assert(!examErrors(s, e!).length, "Bộ đề chưa đủ 10 vị trí hợp lệ.");
       const campaign = s.campaigns.find((c) => c.id === command.campaignId);
       if (command.campaignId)
@@ -401,7 +402,7 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
       const x = session(command.id);
       assert(x.state === "playing", "Lượt đã gửi/rút; không sửa RAW.");
       assert(command.index >= 0 && command.index < 10, "Vị trí không hợp lệ.");
-      assert(canAdvance(x, command.index), "Cần đạt 3/3 trước Q04.");
+      assert(canAdvance(x, command.index), `Cần trả lời đúng ${gateCount(x.exam)}/${gateCount(x.exam)} câu đầu trước khi tiếp tục.`);
       const a = structuredClone(command.answer);
       assert(a.skipped || a.text.trim(), "Nhập đáp án hoặc chọn bỏ qua.");
       assert(
@@ -483,7 +484,7 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
       if (x.state === "submitted") break;
       assert(x.state === "playing", "Lượt đã rút.");
       if (x.owner.startsWith("account:")) assert([command.region, command.upbringing].every((v) => REGION_CHOICES.includes(v)), "Chọn nơi đang sống và nơi lớn lên trong danh sách, hoặc “Không chắc / nhiều nơi”.");
-      assert(canAdvance(x, 10), "Chưa đạt điều kiện 3/3.");
+      assert(canAdvance(x, 10), `Chưa đạt điều kiện ${gateCount(x.exam)}/${gateCount(x.exam)} câu đầu.`);
       assert(
         x.answers.every(
           (a, i) =>
@@ -577,6 +578,7 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
     case "contribute": {
       if (s.contributions.some((c) => c.id === command.id)) break;
       assert(command.consent.collect, "Cần đồng ý tiếp nhận.");
+      assert(command.consent.train || (actor.role === "admin" && command.raw.method === "import"), "Cần đồng ý sử dụng dữ liệu để huấn luyện.");
       assert(
         command.raw.response !== "answer" ||
           [

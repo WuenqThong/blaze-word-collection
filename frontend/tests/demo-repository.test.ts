@@ -55,7 +55,7 @@ describe("IndexedDB sandbox", () => {
       campaignId: "",
       consent: {
         collect: true,
-        train: false,
+        train: true,
         public: false,
         audio: false,
         version: "v1",

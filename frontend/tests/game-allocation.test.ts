@@ -3,7 +3,7 @@ import { seed, consentDefault } from "../src/features/demo/seed";
 import { applyCommand, blankAnswer, gameAllocation, eligible, publiclyVisible } from "../src/features/demo/domain";
 import { DemoRepository } from "../src/features/demo/repository";
 import type { DemoState } from "../src/features/demo/types";
-const consent = { ...consentDefault(), collect: true };
+const consent = { ...consentDefault(), collect: true, train: true };
 function complete(input: DemoState, id: string) {
   let state = input;
   for (let i = 0; i < 10; i++) {

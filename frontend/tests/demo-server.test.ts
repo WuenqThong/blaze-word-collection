@@ -25,7 +25,7 @@ function snap(extra: Partial<Snapshot> = {}): Snapshot {
   };
 }
 function local(id: string, owner = "account:7", withdrawn = false): Contribution {
-  return { id, owner, sessionId: null, parent: null, raw: { ...blankRaw(), text: "rứa" }, consent: { ...consentDefault(), collect: true },
+  return { id, owner, sessionId: null, parent: null, raw: { ...blankRaw(), text: "rứa" }, consent: { ...consentDefault(), collect: true, train: true },
     sourceId: "x", status: "RAW", createdAt: "", withdrawn, curated: null, senseId: null, qaAudio: "" };
 }
 function stateWith(contributions: Contribution[]): DemoState {
@@ -153,10 +153,10 @@ describe("server game allocation", () => {
     const picked = await allocate("p1", local.pool.map((e) => e.id), local.played, "");
     expect(post).toHaveBeenCalledWith("/dialect/allocation", expect.objectContaining({ session_ref: "p1", played: [], campaign_id: "" }));
     expect((post.mock.calls[0][1] as { exam_ids: string[] }).exam_ids).toContain("dataset1-bank-47");
-    const next = applyCommand(state, { type: "autoStart", id: "p1", consent: { ...consentDefault(), collect: true }, campaignId: "", examId: picked.exam_id });
+    const next = applyCommand(state, { type: "autoStart", id: "p1", consent: { ...consentDefault(), collect: true, train: true }, campaignId: "", examId: picked.exam_id });
     expect(next.sessions[0].exam.id).toBe("dataset1-bank-30");
     // A pick the browser can no longer run falls back to the local balance.
-    const closed = applyCommand(state, { type: "autoStart", id: "p2", consent: { ...consentDefault(), collect: true }, campaignId: "", examId: "dataset1-daily" });
+    const closed = applyCommand(state, { type: "autoStart", id: "p2", consent: { ...consentDefault(), collect: true, train: true }, campaignId: "", examId: "dataset1-daily" });
     expect(closed.sessions[0].exam.id).toBe("dataset1-bank-01");
   });
 });

@@ -188,6 +188,8 @@ def create(body: ContributionInput, db: Session = Depends(get_db), user: User = 
         if existing.request_hash != request_hash:
             raise HTTPException(409, "Mã gửi đã được dùng cho nội dung khác. Hãy bắt đầu lượt gửi mới.")
         return pack(existing, db, user)
+    if not body.consent_train and not (user.role == "admin" and body.method == "import"):
+        raise HTTPException(422, "Cần đồng ý sử dụng dữ liệu để huấn luyện trước khi gửi đóng góp mới.")
     if body.parent_id:
         parent = find(db, body.parent_id)
         if parent.owner_id != user.id or parent.withdrawn_at:

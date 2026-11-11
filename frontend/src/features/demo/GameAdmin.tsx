@@ -4,7 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import { useDemo } from "./context";
 import { examErrors, uid, isRepeatSession } from "./domain";
 import { verificationLabel } from "./datasetBank";
-import { examKinds, QUESTION_KINDS, SOURCED_KINDS } from "./seed";
+import { examKinds, gateCount, QUESTION_KINDS, SOURCED_KINDS } from "./seed";
 import { Action, DemoGuard, Field, Heading, Panel, Status } from "./ui";
 import { AnswerTable } from "./GamePages";
 import type { Exam, Question } from "./types";
@@ -318,7 +318,7 @@ function ExamAdminInner() {
               </h3>
               <Status value={e.status} />
               <p>
-                {e.mode === "strict" ? "Khóa 3/3" : "Tín hiệu chất lượng"} ·{" "}
+                {e.mode === "strict" ? `Khóa ${gateCount(e)}/${gateCount(e)}` : "Tín hiệu chất lượng"} ·{" "}
                 {e.demo ? "DEMO" : "Thu thật"}
               </p>
               <div className="demo-actions">
@@ -449,7 +449,7 @@ function ExamEditor({ exam, done }: { exam: Exam; done: () => void }) {
               onChange={(event) => setE({ ...e, title: event.target.value })}
             />
           </Field>
-          <Field label="Q01–Q03">
+          <Field label={`Quy tắc ${gateCount(e)} câu đầu`}>
             <select
               value={e.mode}
               onChange={(event) =>
@@ -457,7 +457,7 @@ function ExamEditor({ exam, done }: { exam: Exam; done: () => void }) {
               }
             >
               <option value="signal">Chỉ tín hiệu chất lượng</option>
-              <option value="strict">Đạt 3/3 để đi tiếp</option>
+              <option value="strict">Đúng {gateCount(e)}/{gateCount(e)} để đi tiếp</option>
             </select>
           </Field>
           <label className="demo-checkbox">

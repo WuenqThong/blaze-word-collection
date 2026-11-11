@@ -119,8 +119,9 @@ function RightsServer() {
       </Panel>
       <Panel title="Bạn đồng ý cho việc gì">
         <p>
-          Đồng ý tiếp nhận là bắt buộc để lưu mẫu. Ba lựa chọn còn lại (dùng để
-          huấn luyện, công khai, dùng âm thanh) tách riêng và mặc định tắt.
+          Bạn phải tự tích đồng ý tiếp nhận, kiểm duyệt và sử dụng dữ liệu để
+          huấn luyện trước khi tham gia. Công khai và dùng âm thanh là các phạm vi
+          riêng. Các ô không được chọn sẵn; khi xuất dữ liệu không hỏi đồng ý lại.
         </p>
         <p>
           Bản gốc bạn gửi được giữ nguyên. Chỉ mẫu đã qua duyệt, đã chuẩn hóa,

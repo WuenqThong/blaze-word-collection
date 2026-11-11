@@ -84,7 +84,7 @@ export function unverifiedQuestion(it: BankItem, slot: number): Question {
 
 /** Nạp kho một lần; đóng ba đề Dataset1 cũ để luật Q1–Q2/Q3–Q10 là luật đang chạy. Lượt cũ giữ snapshot. */
 export function addDatasetBank(s: DemoState): boolean {
-  if (s.installedPacks?.includes(datasetBankPackId)) return false;
+  if (s.installedPacks?.includes(datasetBankPackId)) return applyGatePolicy(s);
   const add = (q: Question) => { if (!s.questions.some((x) => x.id === q.id)) s.questions.push(q); return q.id; };
   const sourced = new Map(dataset1Bank.sourced.map((it) => [it.id, it]));
   const unverified = new Map(dataset1Bank.unverified.map((it) => [it.id, it]));
@@ -96,7 +96,7 @@ export function addDatasetBank(s: DemoState): boolean {
     ];
     const number = String(n + 1).padStart(2, "0");
     const exam: Exam = {
-      id: `dataset1-bank-${number}`, title: `Kho Dataset1 · Đề ${number}`, version: 1, questionIds, mode: "signal", status: "active",
+      id: `dataset1-bank-${number}`, title: `Kho Dataset1 · Đề ${number}`, version: 1, questionIds, mode: "strict", status: "active",
       demo: true, adaptive: false, region: REGION, topic: TOPIC, layout: "sourced2",
     };
     if (!s.exams.some((e) => e.id === exam.id)) s.exams.push(exam);
@@ -105,5 +105,20 @@ export function addDatasetBank(s: DemoState): boolean {
   if (!s.sources.some((x) => x.id === SOURCED_SOURCE)) s.sources.push({ id: SOURCED_SOURCE, title: "Dataset1 · mục từ đã đối chiếu nguồn (Q1–Q2)", evidence: SHEET_URL, train: false, public: false, audio: false, demo: true });
   if (!s.sources.some((x) => x.id === UNVERIFIED_SOURCE)) s.sources.push({ id: UNVERIFIED_SOURCE, title: "Dataset1 · mục chưa kiểm chứng (Q3–Q10)", evidence: SHEET_URL, train: false, public: false, audio: false, demo: true });
   s.installedPacks = [...(s.installedPacks ?? []), datasetBankPackId];
+  applyGatePolicy(s);
+  return true;
+}
+
+function applyGatePolicy(s: DemoState): boolean {
+  const pack = "dataset1-strict-gates-v1";
+  if (s.installedPacks?.includes(pack)) return false;
+  for (const exam of s.exams) {
+    if (exam.id.startsWith("dataset1-bank-") && exam.layout === "sourced2" && exam.mode !== "strict") {
+      exam.mode = "strict";
+      exam.version += 1;
+    }
+  }
+  // Stored sessions keep their original exam snapshot and consent.
+  s.installedPacks = [...(s.installedPacks ?? []), pack];
   return true;
 }

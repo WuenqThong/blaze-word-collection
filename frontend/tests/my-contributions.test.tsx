@@ -13,7 +13,7 @@ function item(id: string, text: string, extra: Partial<Contribution> = {}): Cont
     id, owner: "account:1", sessionId: null, parent: null, sourceId: "s:1", status: "RAW", createdAt: "2026-11-09T05:22:00.000Z",
     withdrawn: false, curated: null, senseId: null, qaAudio: "",
     raw: { ...blankRaw(), text, meaning: `nghĩa ${text}`, region: "TP. Hội An" },
-    consent: { ...consentDefault(), collect: true }, ...extra,
+    consent: { ...consentDefault(), collect: true, train: true }, ...extra,
   };
 }
 

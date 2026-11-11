@@ -40,19 +40,19 @@ describe("required login and district selection", () => {
   it("isolates account history and disallows opening another account's session", async () => {
     const repo = new DemoRepository(crypto.randomUUID()); await repo.load();
     await repo.bindAccount(user(1));
-    await repo.dispatch({ type: "autoStart", id: "a", campaignId: "", consent: { ...consentDefault(), collect: true } }, user(1));
+    await repo.dispatch({ type: "autoStart", id: "a", campaignId: "", consent: { ...consentDefault(), collect: true, train: true } }, user(1));
     const account2 = await repo.bindAccount(user(2));
     expect(gameAllocation(account2, account2.actor).pending).toBeUndefined();
     await expect(repo.dispatch({ type: "moveSession", id: "a", cursor: 1 }, user(2))).rejects.toThrow("không thuộc");
     // A second tab changing the stored actor cannot change the owner of this account's new game.
     await repo.bindAccount(user(1));
-    await repo.dispatch({ type: "autoStart", id: "b", campaignId: "", consent: { ...consentDefault(), collect: true } }, user(2));
+    await repo.dispatch({ type: "autoStart", id: "b", campaignId: "", consent: { ...consentDefault(), collect: true, train: true } }, user(2));
     const state = await repo.load(); expect(state.sessions.find((s) => s.id === "b")!.owner).toBe("account:2");
     expect(gameAllocation(await repo.bindAccount(user(1)), "account:1").pending!.id).toBe("a");
   });
   it("updates district options without rewriting old answers or region metadata", async () => {
     const name = crypto.randomUUID(); const repo = new DemoRepository(name); let state = await repo.load();
-    state = applyCommand(state, { type: "start", id: "legacy", examId: "exam-demo", campaignId: "", consent: { ...consentDefault(), collect: true } });
+    state = applyCommand(state, { type: "start", id: "legacy", examId: "exam-demo", campaignId: "", consent: { ...consentDefault(), collect: true, train: true } });
     state.sessions[0].region = "Quảng Nam"; state.regions = ["Quảng Nam", "Đà Nẵng"];
     state.installedPacks = state.installedPacks?.filter((x) => x !== REGIONS_PACK);
     const db = await openDB(name, 1); await db.put("state", state, "main");
@@ -66,7 +66,7 @@ describe("required login and district selection", () => {
     expect(DISTRICTS).toHaveLength(25);
     expect(DISTRICTS).toContain("TP. Hội An");
     expect(REGION_CHOICES.at(-1)).toBe("Không chắc");
-    let s = applyCommand(seed(), { type: "start", id: "s1", examId: "exam-demo", campaignId: "", consent: { ...consentDefault(), collect: true } });
+    let s = applyCommand(seed(), { type: "start", id: "s1", examId: "exam-demo", campaignId: "", consent: { ...consentDefault(), collect: true, train: true } });
     s.people.push({ ...s.people.find((p) => p.id === s.actor)!, id: "account:1" });
     s.sessions[0].owner = s.actor = "account:1";
     s = applyCommand(s, { type: "sessionMeta", id: "s1", region: "TP. Hội An", upbringing: "Không chắc", usage: "" });

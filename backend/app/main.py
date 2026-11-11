@@ -37,17 +37,15 @@ app.add_middleware(
 )
 
 app.include_router(auth_router.router, prefix="/api")
-app.include_router(projects_router.router, prefix="/api")
-app.include_router(users_router.router, prefix="/api")
-app.include_router(audios_router.router, prefix="/api")
-app.include_router(annotate_router.router, prefix="/api")
-app.include_router(review_router.router, prefix="/api")
-app.include_router(wallet_router.router, prefix="/api")
 app.include_router(dialect_router.router, prefix="/api")
 app.include_router(dialect_workspace_router.router, prefix="/api")
-app.include_router(reports_router.router, prefix="/api")
-app.include_router(roleplay_router.router, prefix="/api")
-app.include_router(roleplay_router.project_router, prefix="/api")
+
+# Pilot excludes legacy APIs, including direct HTTP and WebSocket access.
+if settings.enable_legacy:
+    for router in (projects_router.router, users_router.router, audios_router.router,
+                   annotate_router.router, review_router.router, wallet_router.router,
+                   reports_router.router, roleplay_router.router, roleplay_router.project_router):
+        app.include_router(router, prefix="/api")
 
 
 @app.get("/api/health", tags=["meta"])

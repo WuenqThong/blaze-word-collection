@@ -21,6 +21,7 @@ def main():
     from app.core.database import SessionLocal, init_db
     from app.core.security import hash_password
     from app.models import User
+    from app.models.dialect import DialectContribution
 
     credentials_path = root / 'accounts.json'
     accounts = json.loads(credentials_path.read_text(encoding='utf-8')) if credentials_path.exists() else []
@@ -42,6 +43,11 @@ def main():
 
     with TestClient(app) as client:
         for index, account in enumerate(accounts[:2]):
+            # Preserve existing QA samples and their consent; do not rewrite history.
+            with SessionLocal() as db:
+                owner = db.query(User).filter_by(email=account['email']).one()
+                if db.query(DialectContribution).filter_by(owner_id=owner.id, idempotency_key=f'isolated-qa-sample-{index}').first():
+                    continue
             response = client.post('/api/auth/login', json={k: account[k] for k in ('email', 'password')})
             response.raise_for_status()
             response = client.post('/api/dialect/contributions', json=dict(
@@ -49,7 +55,7 @@ def main():
                 standard_vi=['đâu', 'sao'][index], region='Hội An',
                 context='Dữ liệu tổng hợp QA, không phải khảo sát người dùng.',
                 source_evidence='Fixture QA tổng hợp, không dùng huấn luyện hoặc công bố.',
-                consent_collect=True, consent_train=False, consent_public=False, consent_audio=False,
+                consent_collect=True, consent_train=True, consent_public=False, consent_audio=False,
                 consent_version='demo-consent-v1', idempotency_key=f'isolated-qa-sample-{index}'))
             response.raise_for_status()
             client.post('/api/auth/logout').raise_for_status()
