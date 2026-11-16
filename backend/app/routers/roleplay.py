@@ -126,7 +126,7 @@ def list_project_scenarios(
 ):
     project = psvc.get_or_404(project_id)
     psvc.assert_member(project, user)
-    only_active = user.role != "admin"
+    only_active = user.role not in ('admin', 'reviewer')
     scenarios = svc.list_scenarios_for_project(project_id, only_active=only_active)
     counts = svc.task_counts_for_user(user.id)
     tc_counts = svc.test_case_counts([s.id for s in scenarios])
@@ -273,7 +273,7 @@ def list_scenario_test_cases(
     scenario = svc.get_scenario_or_404(scenario_id)
     if scenario.project_id != project_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Scenario không thuộc project")
-    only_active = user.role != "admin"
+    only_active = user.role not in ('admin', 'reviewer')
     items = svc.list_test_cases(scenario_id, only_active=only_active)
     return [_test_case_public(tc) for tc in items]
 
@@ -426,7 +426,7 @@ def get_scenario(
     db: Session = Depends(get_db),
 ):
     s = svc.get_scenario_or_404(scenario_id)
-    if not s.is_active and user.role != "admin":
+    if not s.is_active and user.role not in ('admin', 'reviewer'):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Scenario không tồn tại")
     project = psvc.get_or_404(s.project_id)
     psvc.assert_member(project, user)
@@ -525,7 +525,7 @@ async def proxy_ws(
         if not task:
             await websocket.close(code=4404, reason="Task not found")
             return
-        if task.user_id != user.id and user.role != "admin":
+        if task.user_id != user.id and user.role not in ('admin', 'reviewer'):
             await websocket.close(code=4403, reason="Forbidden")
             return
 
@@ -594,7 +594,7 @@ def get_recording_url(
     svc: RolePlayService = Depends(_service),
 ):
     task = svc.get_task_or_404(task_id)
-    if task.user_id != user.id and user.role != "admin":
+    if task.user_id != user.id and user.role not in ('admin', 'reviewer'):
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không phải task của bạn")
     url = svc.task_recording_url(task)
     if not url:

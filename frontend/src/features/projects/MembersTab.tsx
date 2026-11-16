@@ -1,3 +1,4 @@
+import { displayLabel } from "../../lib/display";
 import { useCallback, useEffect, useState } from "react";
 import { Card, Table, Button, Modal, Form, Spinner, Alert, Badge, InputGroup } from "react-bootstrap";
 import { projectsApi } from "../../api/projects";
@@ -5,7 +6,7 @@ import { usersApi } from "../../api/users";
 import { extractError } from "../../api/client";
 import type { ProjectMember } from "../../lib/projectTypes";
 import type { User } from "../../lib/types";
-import { useConfirm } from "../../components/ConfirmProvider";
+import { useConfirm } from "../../components/useConfirm";
 
 interface MembersTabProps {
   projectId: number;
@@ -22,7 +23,7 @@ export function MembersTab({ projectId, isPublic, isAdmin }: MembersTabProps) {
   const reload = useCallback(() => {
     projectsApi.listMembers(projectId)
       .then(setMembers)
-      .catch((e) => setError(extractError(e, "Không tải được member")));
+      .catch((e) => setError(extractError(e, "Không tải được thành viên")));
   }, [projectId]);
 
   useEffect(() => { reload(); }, [reload]);
@@ -30,7 +31,7 @@ export function MembersTab({ projectId, isPublic, isAdmin }: MembersTabProps) {
   const handleRemove = async (userId: number, name: string) => {
     const ok = await confirm({
       title: "Xoá thành viên",
-      message: <>Xoá <strong>{name}</strong> khỏi project?</>,
+      message: <>Xoá <strong>{name}</strong> khỏi dự án?</>,
       confirmText: "Xoá",
       variant: "danger",
       icon: "bi-person-x",
@@ -50,15 +51,15 @@ export function MembersTab({ projectId, isPublic, isAdmin }: MembersTabProps) {
         <Alert variant="info" className="d-flex align-items-start gap-2 py-2">
           <i className="bi bi-globe mt-1"></i>
           <div className="flex-grow-1">
-            <strong>Project public</strong> — mọi user đăng nhập đều có thể vào và nhận task.
-            <div className="small text-muted">Danh sách dưới chỉ là role <em>manager</em> để đặc quyền (review, quản lý) — không bắt buộc.</div>
+            <strong>Dự án công khai</strong> — mọi người dùng đăng nhập đều có thể vào và nhận nhiệm vụ.
+            <div className="small text-muted">Danh sách dưới chỉ là vai trò <em>người quản lý</em> để đặc quyền (đang đánh giá, quản lý) — không bắt buộc.</div>
           </div>
         </Alert>
       )}
 
       <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
         <div className="text-muted small">
-          {members?.length ?? "—"} {isPublic ? "manager / contributor được gắn role riêng" : "member"}
+          {members?.length ?? "—"} {isPublic ? "người quản lý / contributor được gắn vai trò riêng" : "member"}
         </div>
         {isAdmin && (
           <Button size="sm" variant="primary" onClick={() => setShowAdd(true)}>
@@ -76,7 +77,7 @@ export function MembersTab({ projectId, isPublic, isAdmin }: MembersTabProps) {
           <Card.Body className="text-center py-5 text-muted">
             <i className="bi bi-people" style={{ fontSize: "2rem" }}></i>
             <p className="mt-2 mb-0">
-              {isPublic ? "Chưa gắn role đặc biệt cho user nào." : "Chưa có member nào."}
+              {isPublic ? "Chưa gắn vai trò đặc biệt cho người dùng nào." : "Chưa có thành viên nào."}
             </p>
           </Card.Body>
         </Card>
@@ -88,7 +89,7 @@ export function MembersTab({ projectId, isPublic, isAdmin }: MembersTabProps) {
                 <tr>
                   <th>Họ tên</th>
                   <th>Email</th>
-                  <th>Role</th>
+                  <th>Vai trò</th>
                   <th>Tham gia</th>
                   <th style={{ width: 80 }}></th>
                 </tr>
@@ -100,7 +101,7 @@ export function MembersTab({ projectId, isPublic, isAdmin }: MembersTabProps) {
                     <td className="text-muted small">{m.email}</td>
                     <td>
                       <Badge bg={m.role === "manager" ? "primary" : "secondary"} className="text-uppercase">
-                        {m.role}
+                        {displayLabel(m.role)}
                       </Badge>
                     </td>
                     <td className="small text-muted">
@@ -109,7 +110,7 @@ export function MembersTab({ projectId, isPublic, isAdmin }: MembersTabProps) {
                     <td className="text-end">
                       {isAdmin && (
                         <Button variant="link" size="sm" className="p-1 text-danger"
-                          onClick={() => handleRemove(m.user_id, m.full_name)} title="Gỡ khỏi project">
+                          onClick={() => handleRemove(m.user_id, m.full_name)} title="Gỡ khỏi dự án">
                           <i className="bi bi-x-circle"></i>
                         </Button>
                       )}
@@ -155,7 +156,7 @@ function AddMemberModal({
       setSearching(true);
       usersApi.search(q || undefined)
         .then(setResults)
-        .catch((e) => setError(extractError(e, "Không tìm được user")))
+        .catch((e) => setError(extractError(e, "Không tìm được người dùng")))
         .finally(() => setSearching(false));
     }, 250);
     return () => clearTimeout(handle);
@@ -182,10 +183,10 @@ function AddMemberModal({
       </Modal.Header>
       <Modal.Body>
         <Form.Group className="mb-3">
-          <Form.Label className="small text-muted">Role gán</Form.Label>
+          <Form.Label className="small text-muted">Vai trò gán</Form.Label>
           <Form.Select size="sm" value={selectedRole} onChange={(e) => setSelectedRole(e.target.value as "member" | "manager")}>
-            <option value="member">Member — gán thông thường</option>
-            <option value="manager">Manager — quản lý project</option>
+            <option value="member">Thành viên — gán thông thường</option>
+            <option value="manager">Người quản lý — quản lý dự án</option>
           </Form.Select>
         </Form.Group>
 
@@ -204,7 +205,7 @@ function AddMemberModal({
         {searching ? (
           <div className="text-center py-3"><Spinner size="sm" animation="border" /></div>
         ) : results.length === 0 ? (
-          <div className="text-center py-3 text-muted small">Không tìm thấy user nào.</div>
+          <div className="text-center py-3 text-muted small">Không tìm thấy người dùng nào.</div>
         ) : (
           <div style={{ maxHeight: 320, overflowY: "auto" }}>
             {results.map((u) => {
@@ -226,11 +227,11 @@ function AddMemberModal({
                     </div>
                     <div className="flex-grow-1 text-truncate">
                       <div style={{ fontWeight: 600 }} className="text-truncate">{u.full_name}</div>
-                      <div className="small text-muted text-truncate">{u.email} · {u.role}</div>
+                      <div className="small text-muted text-truncate">{u.email} · {displayLabel(u.role)}</div>
                     </div>
                   </div>
                   {isMember ? (
-                    <Badge bg="success">Đã trong project</Badge>
+                    <Badge bg="success">Đã trong dự án</Badge>
                   ) : (
                     <Button size="sm" variant="outline-primary"
                       onClick={() => handleAdd(u)}

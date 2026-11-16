@@ -1,13 +1,16 @@
+import { ApplicationError } from "../../components/ApplicationError";
+
 export const demoRoute = {
+  errorElement: <ApplicationError />,
   path: "/demo",
   hydrateFallbackElement: (
     <p role="status" className="collection-empty">
-      Đang mở giao diện DEMO…
+      Đang mở giao diện Minh họa…
     </p>
   ),
   lazy: async () => ({ Component: (await import("./DemoLayout")).DemoRoot }),
   children: [
-    { path: "internal", element: <section className="demo-panel"><h1>Thử nghiệm nội bộ</h1><p>Chọn vai trò ở công cụ phía trên để thử phân luồng. Đây là mô phỏng trên trình duyệt, không phải đăng nhập hoặc phân quyền máy chủ.</p><a href="/demo/admin/dashboard">Mở quản trị</a><br /><a href="/demo/admin/review">Mở hàng chờ reviewer</a></section> },
+    { path: "internal", element: <section className="demo-panel"><h1>Thử nghiệm nội bộ</h1><p>Chọn vai trò ở công cụ phía trên để thử phân luồng. Đây là mô phỏng trên trình duyệt, không phải đăng nhập hoặc phân quyền máy chủ.</p><a href="/demo/admin/dashboard">Mở quản trị</a><br /><a href="/demo/admin/review">Mở hàng chờ người duyệt</a></section> },
     {
       index: true,
       lazy: async () => ({ Component: (await import("./HomeDemo")).HomeDemo }),
@@ -103,6 +106,10 @@ export const demoRoute = {
       }),
     },
     {
+      path: "reviewer/review",
+      lazy: async () => ({ Component: (await import("./ReviewDemo")).ReviewDemo }),
+    },
+    {
       path: "admin/review",
       lazy: async () => ({
         Component: (await import("./ReviewDemo")).ReviewDemo,
@@ -142,10 +149,15 @@ export const demoRoute = {
       path: "*",
       element: (
         <section className="demo-panel">
-          <h1>Không tìm thấy trang demo</h1>
+          <h1>Không tìm thấy trang minh họa</h1>
           <a href="/demo">Về trang chủ</a>
         </section>
       ),
     },
   ],
 };
+
+// Canonical staff URLs; old /admin URLs remain redirects in DemoLayout.
+for (const route of [...demoRoute.children]) {
+  if (route.path?.startsWith("admin/") && !demoRoute.children.some(existing => existing.path === route.path?.replace("admin/", "reviewer/"))) demoRoute.children.push({ ...route, path: route.path.replace("admin/", "reviewer/") });
+}

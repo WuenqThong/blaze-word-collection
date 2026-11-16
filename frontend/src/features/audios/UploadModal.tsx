@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Modal, Button, Form, Alert, ProgressBar, Badge, InputGroup, Tabs, Tab } from "react-bootstrap";
 import { audiosApi } from "../../api/audios";
 import { extractError } from "../../api/client";
@@ -16,26 +16,26 @@ interface UploadModalProps {
 }
 
 const TASK_HINT: Record<TaskType, string> = {
-  audio_label: "Annotator nghe và nhập transcript / chọn label. Có thể đính kèm prelabel để chỉnh sửa.",
-  audio_verify: "Annotator nghe + xem nhãn gợi ý → bấm đúng / sai. Bắt buộc đính kèm `suggested_label`.",
-  qa: "Mỗi audio gắn với 1 câu hỏi. Annotator ghi âm trả lời. Bắt buộc đính kèm `question`.",
+  audio_label: "Người gán nhãn nghe và nhập bản chép lời / chọn nhãn. Có thể đính kèm nhãn gợi ý để chỉnh sửa.",
+  audio_verify: "Người gán nhãn nghe + xem nhãn gợi ý → bấm đúng / sai. Bắt buộc đính kèm `suggested_label`.",
+  qa: "Mỗi âm thanh gắn với 1 câu hỏi. Người gán nhãn ghi âm trả lời. Bắt buộc đính kèm `question`.",
 };
 
 interface MetaHint { title: string; format: string; required: boolean; description?: string; }
 
 const META_HINT: Record<TaskType, MetaHint> = {
   audio_label: {
-    title: "Prelabel / Transcript gợi ý",
-    format: "filename,prelabel\nfoo.wav,xin chào hôm nay là thứ hai",
+    title: "Nhãn gợi ý / Bản chép lời gợi ý",
+    format: "filename,nhãn gợi ý\nfoo.wav,xin chào hôm nay là thứ hai",
     required: false,
   },
   audio_verify: {
-    title: "Nhãn gợi ý cho từng audio",
+    title: "Nhãn gợi ý cho từng âm thanh",
     format: "filename,suggested_label\nfoo.wav,xin chào\nbar.wav,tạm biệt",
     required: true,
   },
   qa: {
-    title: "Câu hỏi cho từng audio",
+    title: "Câu hỏi cho từng âm thanh",
     format: "filename,question,options\nfoo.wav,Người nói nam hay nữ?,Nam|Nữ|Không rõ",
     required: true,
   },
@@ -44,16 +44,16 @@ const META_HINT: Record<TaskType, MetaHint> = {
 /** Khi upload vào kiểm soát chất lượng (golden), MỌI loại task phải kèm nhãn đúng. */
 const META_HINT_GOLDEN: Record<TaskType, MetaHint> = {
   audio_label: {
-    title: "Transcript đúng (ground truth)",
-    format: "filename,prelabel\nfoo.wav,xin chào hôm nay là thứ hai",
+    title: "Bản chép lời đúng (đáp án chuẩn)",
+    format: "filename,nhãn gợi ý\nfoo.wav,xin chào hôm nay là thứ hai",
     required: true,
-    description: "Ground truth dùng để kiểm tra accuracy annotator.",
+    description: "Đáp án chuẩn dùng để kiểm tra độ chính xác người gán nhãn.",
   },
   audio_verify: {
-    title: "Nhãn đúng (ground truth)",
+    title: "Nhãn đúng (đáp án chuẩn)",
     format: "filename,suggested_label\nfoo.wav,xin chào",
     required: true,
-    description: "Annotator sẽ thấy nhãn này và phải xác nhận đúng/sai trùng với ground truth.",
+    description: "Người gán nhãn sẽ thấy nhãn này và phải xác nhận đúng/sai trùng với đáp án chuẩn.",
   },
   qa: {
     title: "Câu hỏi + đáp án đúng",
@@ -68,12 +68,12 @@ type Step = 1 | 2 | 3 | 4;
 export function UploadModal({ show, onHide, projectId, enabledTaskTypes, onUploaded, isGolden = false, lockedTaskType }: UploadModalProps) {
   const initialStep: Step = lockedTaskType ? 2 : 1;
   const [step, setStep] = useState<Step>(initialStep);
-  const [taskType, setTaskType] = useState<TaskType>(lockedTaskType ?? enabledTaskTypes[0] ?? "audio_label");
+  const [selectedTaskType, setTaskType] = useState<TaskType>(lockedTaskType ?? enabledTaskTypes[0] ?? "audio_label");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Step 1: upload method (direct / sync / qa-text)
-  const [method, setMethod] = useState<"direct" | "sync" | "qa-text">(
+  const [selectedMethod, setMethod] = useState<"direct" | "sync" | "qa-text">(
     (lockedTaskType ?? enabledTaskTypes[0]) === "qa" ? "qa-text" : "direct",
   );
   const [files, setFiles] = useState<File[]>([]);
@@ -100,22 +100,8 @@ export function UploadModal({ show, onHide, projectId, enabledTaskTypes, onUploa
   const [matchedPrelabel, setMatchedPrelabel] = useState(0);
   const [unmatchedPrelabel, setUnmatchedPrelabel] = useState(0);
 
-  useEffect(() => {
-    if (lockedTaskType) {
-      // Sync với pill đang active
-      setTaskType(lockedTaskType);
-      return;
-    }
-    if (!enabledTaskTypes.includes(taskType) && enabledTaskTypes.length) {
-      setTaskType(enabledTaskTypes[0]);
-    }
-  }, [enabledTaskTypes, taskType, lockedTaskType]);
-
-  // QA: chỉ cho phép upload câu hỏi text. Các task khác: direct hoặc sync.
-  useEffect(() => {
-    if (taskType === "qa") setMethod("qa-text");
-    else if (method === "qa-text") setMethod("direct");
-  }, [taskType, method]);
+  const taskType = lockedTaskType ?? (enabledTaskTypes.includes(selectedTaskType) ? selectedTaskType : (enabledTaskTypes[0] ?? "audio_label"));
+  const method = taskType === "qa" ? "qa-text" : selectedMethod === "qa-text" ? "direct" : selectedMethod;
 
   const reset = () => {
     setStep(lockedTaskType ? 2 : 1);
@@ -153,7 +139,7 @@ export function UploadModal({ show, onHide, projectId, enabledTaskTypes, onUploa
       setUploadedCount(created.length);
       setStep(3); // luôn qua bước metadata; user có thể skip nếu không bắt buộc
     } catch (e) {
-      setError(extractError(e, "Upload thất bại"));
+      setError(extractError(e, "Tải lên thất bại"));
     } finally {
       setBusy(false);
     }
@@ -167,14 +153,14 @@ export function UploadModal({ show, onHide, projectId, enabledTaskTypes, onUploa
       setUploadedCount(created.length);
       setStep(4); // skip prelabel — question đã được parse từ file
     } catch (e) {
-      setError(extractError(e, "Upload câu hỏi thất bại"));
+      setError(extractError(e, "Tải lên câu hỏi thất bại"));
     } finally {
       setBusy(false);
     }
   };
 
   const downloadQaTemplate = () => {
-    const csv = "question\nNgười nói nam hay nữ?\nCó bao nhiêu người trong audio?\nTâm trạng người nói thế nào?\n";
+    const csv = "question\nNgười nói nam hay nữ?\nCó bao nhiêu người trong âm thanh?\nTâm trạng người nói thế nào?\n";
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -194,7 +180,7 @@ export function UploadModal({ show, onHide, projectId, enabledTaskTypes, onUploa
         bucket, prefix, task_type: taskType, is_golden: isGolden, limit,
       });
       setUploadedCount(r.imported);
-      if (r.errors.length) setError(`${r.errors.length} file lỗi: ${r.errors.slice(0, 2).join("; ")}`);
+      if (r.errors.length) setError(`${r.errors.length} tệp lỗi: ${r.errors.slice(0, 2).join("; ")}`);
       setStep(3);
     } catch (e) {
       setError(extractError(e, "Sync thất bại"));
@@ -235,9 +221,9 @@ export function UploadModal({ show, onHide, projectId, enabledTaskTypes, onUploa
       <Modal.Header closeButton>
         <Modal.Title>
           <i className="bi bi-cloud-upload me-2"></i>
-          {step === 1 && "Chọn loại task"}
+          {step === 1 && "Chọn loại nhiệm vụ"}
           {step === 2 && "Upload dataset"}
-          {step === 3 && (meta.required ? "Metadata bắt buộc" : "Prelabel (tuỳ chọn)")}
+          {step === 3 && (meta.required ? "Metadata bắt buộc" : "Nhãn gợi ý (tuỳ chọn)")}
           {step === 4 && "Hoàn tất"}
         </Modal.Title>
       </Modal.Header>
@@ -248,7 +234,7 @@ export function UploadModal({ show, onHide, projectId, enabledTaskTypes, onUploa
           <>
             <p className="text-muted small mb-3">
               <i className="bi bi-info-circle me-1"></i>
-              Mỗi lần upload chỉ chọn 1 loại task. Bạn có thể upload thêm loại khác trong lần khác.
+              Mỗi lần tải lên chỉ chọn 1 loại nhiệm vụ. Bạn có thể tải lên thêm loại khác trong lần khác.
             </p>
             <div className="d-grid gap-2">
               {enabledTaskTypes.map((tt) => {
@@ -291,21 +277,21 @@ export function UploadModal({ show, onHide, projectId, enabledTaskTypes, onUploa
               <div className="upload-task-summary mb-3">
                 <i className={`bi ${TASK_TYPE_LABELS[taskType].icon} me-2 text-primary`}></i>
                 <strong>{TASK_TYPE_LABELS[taskType].title}</strong>
-                {isGolden && <Badge bg="warning" text="dark" className="ms-2">Golden</Badge>}
+                {isGolden && <Badge bg="warning" text="dark" className="ms-2">Mẫu kiểm tra chuẩn</Badge>}
               </div>
             )}
             {taskType === "qa" ? (
               <div>
                 <p className="small text-muted mb-2">
-                  Mỗi câu hỏi sẽ tạo thành 1 task QA. Annotator ghi âm trả lời cho từng câu.
+                  Mỗi câu hỏi sẽ tạo thành 1 nhiệm vụ Kiểm tra chất lượng. Người gán nhãn ghi âm trả lời cho từng câu.
                 </p>
                 <ul className="small text-muted mb-3 ps-3">
-                  <li><strong>CSV / Excel</strong>: cột <code>question</code> (hoặc cột đầu nếu không có header)</li>
+                  <li><strong>CSV / Excel</strong>: cột <span>nội dung câu hỏi theo tệp mẫu</span> (hoặc cột đầu nếu không có header)</li>
                   <li><strong>TXT</strong>: mỗi dòng = 1 câu hỏi</li>
                 </ul>
                 <div className="mb-2">
                   <Button variant="link" size="sm" className="p-0 text-decoration-none" onClick={downloadQaTemplate} disabled={busy}>
-                    <i className="bi bi-download me-1"></i>Tải file mẫu CSV
+                    <i className="bi bi-download me-1"></i>Tải tệp mẫu CSV
                   </Button>
                 </div>
                 <InputGroup>
@@ -325,7 +311,7 @@ export function UploadModal({ show, onHide, projectId, enabledTaskTypes, onUploa
               </div>
             ) : (
               <Tabs activeKey={method} onSelect={(k) => k && setMethod(k as "direct" | "sync")} className="mb-3">
-                <Tab eventKey="direct" title={<><i className="bi bi-upload me-1"></i>Upload trực tiếp</>}>
+                <Tab eventKey="direct" title={<><i className="bi bi-upload me-1"></i>Tải lên trực tiếp</>}>
                   <Form.Label
                     ref={dropRef}
                     htmlFor="audio-files"
@@ -340,8 +326,8 @@ export function UploadModal({ show, onHide, projectId, enabledTaskTypes, onUploa
                     style={{ cursor: busy ? "not-allowed" : "pointer", background: "var(--surface-1)" }}
                   >
                     <i className="bi bi-cloud-arrow-up" style={{ fontSize: "2rem", color: "var(--brand-500)" }}></i>
-                    <div className="mt-2"><strong>Kéo thả</strong> file audio vào đây hoặc bấm để chọn</div>
-                    <div className="small text-muted">WAV / MP3 / M4A / FLAC / OGG · tối đa 50MB/file</div>
+                    <div className="mt-2"><strong>Kéo thả</strong> tệp âm thanh vào đây hoặc bấm để chọn</div>
+                    <div className="small text-muted">WAV / MP3 / M4A / FLAC / OGG · tối đa 50MB/tệp</div>
                     <input
                       id="audio-files"
                       type="file"
@@ -355,7 +341,7 @@ export function UploadModal({ show, onHide, projectId, enabledTaskTypes, onUploa
 
                   {files.length > 0 && (
                     <div className="mt-3">
-                      <div className="small text-muted mb-2">{files.length} file sẵn sàng:</div>
+                      <div className="small text-muted mb-2">{files.length} tệp sẵn sàng:</div>
                       <div className="d-flex flex-wrap gap-1">
                         {files.slice(0, 12).map((f, i) => (
                           <Badge key={i} bg="light" text="dark" className="border">
@@ -374,10 +360,10 @@ export function UploadModal({ show, onHide, projectId, enabledTaskTypes, onUploa
 
                 <Tab eventKey="sync" title={<><i className="bi bi-arrow-down-up me-1"></i>Sync từ MinIO/S3</>}>
                   <p className="small text-muted">
-                    Cung cấp credential để hệ thống kết nối + copy audio từ bucket nguồn về MinIO của bạn.
+                    Cung cấp credential để hệ thống kết nối + copy âm thanh từ kho lưu trữ nguồn về MinIO của bạn.
                   </p>
                   <Form.Group className="mb-2">
-                    <Form.Label className="small">Endpoint</Form.Label>
+                    <Form.Label className="small">Địa chỉ kết nối</Form.Label>
                     <Form.Control
                       placeholder="vd: s3.amazonaws.com hoặc 192.168.1.10:9000"
                       value={endpoint} onChange={(e) => setEndpoint(e.target.value)} disabled={busy}
@@ -385,25 +371,25 @@ export function UploadModal({ show, onHide, projectId, enabledTaskTypes, onUploa
                   </Form.Group>
                   <div className="row g-2 mb-2">
                     <div className="col-md-6">
-                      <Form.Label className="small">Access key</Form.Label>
+                      <Form.Label className="small">Khóa truy cập</Form.Label>
                       <Form.Control value={accessKey} onChange={(e) => setAccessKey(e.target.value)} disabled={busy} />
                     </div>
                     <div className="col-md-6">
-                      <Form.Label className="small">Secret key</Form.Label>
+                      <Form.Label className="small">Khóa bí mật</Form.Label>
                       <Form.Control type="password" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} disabled={busy} />
                     </div>
                   </div>
                   <div className="row g-2 mb-2">
                     <div className="col-md-5">
-                      <Form.Label className="small">Bucket</Form.Label>
+                      <Form.Label className="small">Kho lưu trữ</Form.Label>
                       <Form.Control value={bucket} onChange={(e) => setBucket(e.target.value)} disabled={busy} />
                     </div>
                     <div className="col-md-5">
-                      <Form.Label className="small">Prefix</Form.Label>
+                      <Form.Label className="small">Tiền tố</Form.Label>
                       <Form.Control placeholder="vd: 2025-q4/" value={prefix} onChange={(e) => setPrefix(e.target.value)} disabled={busy} />
                     </div>
                     <div className="col-md-2">
-                      <Form.Label className="small">Limit</Form.Label>
+                      <Form.Label className="small">Giới hạn</Form.Label>
                       <Form.Control type="number" min={1} max={500} value={limit} onChange={(e) => setLimit(Number(e.target.value))} disabled={busy} />
                     </div>
                   </div>
@@ -427,8 +413,8 @@ export function UploadModal({ show, onHide, projectId, enabledTaskTypes, onUploa
                 <div className="text-muted mt-1">
                   {meta.description
                     ?? (meta.required
-                      ? `Task ${taskMeta.title} cần metadata cho mỗi audio. Nếu bỏ qua, annotator không thể gán nhãn.`
-                      : "Bạn có thể bỏ qua bước này — annotator sẽ tự nhập transcript từ đầu.")}
+                      ? `Task ${taskMeta.title} cần metadata cho mỗi âm thanh. Nếu bỏ qua, người gán nhãn không thể gán nhãn.`
+                      : "Bạn có thể bỏ qua bước này — người gán nhãn sẽ tự nhập bản chép lời từ đầu.")}
                 </div>
               </div>
             </Alert>
@@ -459,9 +445,9 @@ export function UploadModal({ show, onHide, projectId, enabledTaskTypes, onUploa
             <div className="upload-done-icon"><i className="bi bi-check2-circle"></i></div>
             <h5 className="upload-done-title">Hoàn tất!</h5>
             <p className="text-muted">
-              Đã thêm <strong>{uploadedCount}</strong> audio vào project.
-              {matchedPrelabel > 0 && <> Áp dụng metadata cho <strong>{matchedPrelabel}</strong> audio.</>}
-              {unmatchedPrelabel > 0 && <> ({unmatchedPrelabel} dòng metadata không khớp tên file)</>}
+              Đã thêm <strong>{uploadedCount}</strong> âm thanh vào dự án.
+              {matchedPrelabel > 0 && <> Áp dụng metadata cho <strong>{matchedPrelabel}</strong> âm thanh.</>}
+              {unmatchedPrelabel > 0 && <> ({unmatchedPrelabel} dòng metadata không khớp tên tệp)</>}
             </p>
           </div>
         )}
@@ -486,7 +472,7 @@ export function UploadModal({ show, onHide, projectId, enabledTaskTypes, onUploa
         {/* Step 2: upload */}
         {step === 2 && method === "direct" && (
           <Button variant="primary" onClick={handleDirectUpload} disabled={!files.length || busy}>
-            {busy ? "Đang upload..." : <>Upload &amp; tiếp tục <i className="bi bi-arrow-right ms-1"></i></>}
+            {busy ? "Đang tải lên..." : <>Tải lên &amp; tiếp tục <i className="bi bi-arrow-right ms-1"></i></>}
           </Button>
         )}
         {step === 2 && method === "sync" && (

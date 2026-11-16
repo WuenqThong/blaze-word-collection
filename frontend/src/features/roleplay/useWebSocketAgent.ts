@@ -2,12 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { apiClient } from "../../api/client";
 
 interface Options {
-  onEvent?: (data: any) => void;
+  onEvent?: (data: Record<string, unknown>) => void;
   onConnectionStateChange?: (state: "connecting" | "open" | "closed" | "error") => void;
   /** Agent emit `session.closed` → tự động kết thúc phiên ở phía client. */
   onAgentClosed?: () => void;
   /** Agent emit `conversation.item.completed.report` → trả về report agent thu thập. */
-  onReport?: (report: Record<string, any>) => void;
+  onReport?: (report: Record<string, unknown>) => void;
   /** Agent state: idle | listening | thinking | speaking — dùng để vẽ UI mic. */
   onAgentState?: (state: string) => void;
 }
@@ -140,7 +140,7 @@ export function useWebSocketAgent({ onEvent, onConnectionStateChange, onAgentClo
   const playPCM = useCallback(async (buf: ArrayBuffer) => {
     const ctx = playCtxRef.current;
     if (!ctx) {
-      console.warn("[roleplay] playback ctx chưa init khi nhận audio");
+      console.warn("[roleplay] playback ctx chưa init khi nhận âm thanh");
       return;
     }
     if (buf.byteLength === 0) return;
@@ -196,7 +196,7 @@ export function useWebSocketAgent({ onEvent, onConnectionStateChange, onAgentClo
       audio: { channelCount: 1, echoCancellation: true, autoGainControl: true, noiseSuppression: true },
     });
     micStreamRef.current = stream;
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const ctx = new (window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext!)();
     micCtxRef.current = ctx;
     const nativeRate = ctx.sampleRate;
     const source = ctx.createMediaStreamSource(stream);
@@ -228,7 +228,7 @@ export function useWebSocketAgent({ onEvent, onConnectionStateChange, onAgentClo
 
     // Tạo AudioContext NGAY trong user gesture chain (click → start → connect)
     // để browser không block autoplay. Resume nếu suspended.
-    const playCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const playCtx = new (window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext!)();
     if (playCtx.state === "suspended") {
       try { await playCtx.resume(); } catch { /* ignore */ }
     }
@@ -278,7 +278,9 @@ export function useWebSocketAgent({ onEvent, onConnectionStateChange, onAgentClo
         }
         if (typeof e.data === "string") {
           const text = e.data.trim();
-          const handle = (parsed: any) => {
+          const handle = (value: unknown) => {
+            if (!value || typeof value !== "object" || Array.isArray(value)) return;
+            const parsed = value as Record<string, unknown>;
             const t = parsed.type || parsed.event_type;
             // Agent (OpenAI Realtime style) gửi audio qua `response.audio.delta`
             // với field `delta` là base64 PCM16 16kHz mono.
@@ -307,8 +309,8 @@ export function useWebSocketAgent({ onEvent, onConnectionStateChange, onAgentClo
               onAgentStateRef.current?.(parsed.agent_state);
             }
             // Report agent thu thập (event conversation.item.completed.report)
-            if (t === "conversation.item.completed" && parsed.report) {
-              onReportRef.current?.(parsed.report);
+            if (t === "conversation.item.completed" && parsed.report && typeof parsed.report === "object" && !Array.isArray(parsed.report)) {
+              onReportRef.current?.(parsed.report as Record<string, unknown>);
             }
             // Agent kết thúc session
             if (t === "session.closed") {
@@ -344,7 +346,7 @@ export function useWebSocketAgent({ onEvent, onConnectionStateChange, onAgentClo
         onCSCRef.current?.("closed");
       };
     });
-  }, [cleanup, playPCM, setupMic]);
+  }, [cleanup, playPCM, setupMic, stopPlayback]);
 
   const disconnect = useCallback(async () => {
     if (wsRef.current) {
@@ -356,7 +358,7 @@ export function useWebSocketAgent({ onEvent, onConnectionStateChange, onAgentClo
     setIsConnected(false);
   }, [cleanup]);
 
-  const sendEvent = useCallback((eventType: string, data?: any) => {
+  const sendEvent = useCallback((eventType: string, data?: unknown) => {
     const ws = wsRef.current;
     if (ws?.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ event_type: eventType, data: data ?? {} }));

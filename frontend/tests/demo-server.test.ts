@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AxiosError, AxiosHeaders } from "axios";
 import { apiClient } from "../src/api/client";
 import { seed, blankRaw, consentDefault } from "../src/features/demo/seed";
-import { execute, flush, merge, outbox, runsOnServer, SERVER_COMMANDS, type Snapshot } from "../src/features/demo/server";
+import { accountView, execute, flush, flushReceipts, prepareOutbox, snapshot, merge, outbox, runsOnServer, SERVER_COMMANDS, type Snapshot } from "../src/features/demo/server";
 import type { Contribution, DemoState } from "../src/features/demo/types";
 import type { User } from "../src/lib/types";
 
@@ -37,10 +37,17 @@ const httpError = (status: number) => new AxiosError("fail", "ERR", undefined, u
 afterEach(() => vi.restoreAllMocks());
 
 describe("server snapshot merge", () => {
+  it("uses the assigned review region instead of the reviewer's profile region", () => {
+    const reviewer = { ...person(8, "reviewer"), region: "Đà Nẵng", review_region: "TP. Hội An" };
+    const s = merge(seed(), snap({ me: reviewer, people: [reviewer] }));
+    expect(s.people.find(p => p.id === "account:8")?.region).toBe("TP. Hội An");
+    const unassigned = { ...reviewer, review_region: "" };
+    expect(merge(seed(), snap({ me: unassigned, people: [unassigned] })).people.find(p => p.id === "account:8")?.region).toBe("");
+  });
   it("replaces server collections, keeps the account's pending items and seals other votes", () => {
     const base = stateWith([local("seed-other", "member"), local("pending-1"), local("gone", "account:7", true)]);
     const s = merge(base, snap());
-    expect(s.contributions.map((c) => c.id)).toEqual(["c:1", "pending-1"]);
+    expect(s.contributions.map((c) => c.id)).toEqual(["c:1", "pending-1", "gone"]);
     const c = s.contributions[0];
     expect(c).toMatchObject({ owner: "account:7", sourceId: "s:31", sessionId: "session-1", createdAt: "2026-11-09T01:02:03.000Z" });
     expect(c.raw).toMatchObject({ text: "mô", standard: "đâu", evidence: "nhà", method: "game" });
@@ -95,9 +102,9 @@ describe("outbox flush", () => {
       if (key === "net-item") throw new AxiosError("Network Error");
       return { data: {} };
     });
-    const result = await flush(state, 7);
+    const result = await flush(prepareOutbox(state, 7, new Set(["ok-item", "bad-item", "net-item"])), 7);
     expect(post).toHaveBeenCalledTimes(3);
-    expect(post.mock.calls[0][1]).toMatchObject({ original_text: "rứa", consent_collect: true, consent_version: "demo-consent-v1", idempotency_key: "ok-item" });
+    expect(post.mock.calls[0][1]).toMatchObject({ original_text: "rứa", consent_collect: true, consent_version: "demo-consent-v1", idempotency_key: "ok-item", expected_owner_id: 7 });
     expect(result.rejected.map((r) => r.id)).toEqual(["bad-item"]);
     expect(result.pending).toBeTruthy();
     expect(outbox(state, 7)).toHaveLength(3);
@@ -123,15 +130,17 @@ describe("server commands", () => {
     const state = merge(seed(), snap({ people: [person(7), person(8, "reviewer"), person(9, "admin")] }));
 
     await execute({ type: "vote", id: "c:1", verdict: "VERIFIED", checks: [true, true, false, true], note: "ok" }, state, me);
-    expect(post).toHaveBeenLastCalledWith("/dialect/reviews/1/votes", { verdict: "VERIFIED", meaning_ok: true, region_ok: true, context_ok: false, translation_ok: true, note: "ok" });
+    expect(post).toHaveBeenLastCalledWith("/dialect/reviews/1/votes", { verdict: "VERIFIED", meaning_ok: true, region_ok: true, context_ok: false, translation_ok: true, note: "ok" }, { headers: { "X-Account-ID": "7" } });
 
     const reviewer = state.people.find((p) => p.id === "account:8")!;
     await execute({ type: "person", person: { ...reviewer, role: "contributor", region: "Đà Nẵng" } }, state, me);
-    expect(put).toHaveBeenLastCalledWith("/dialect/participants/8", { verified: false, risk: "clear", review_region: "Đà Nẵng", role: "annotator" });
-    await expect(execute({ type: "person", person: { ...reviewer, role: "admin" } }, state, me)).rejects.toThrow(/admin/);
+    expect(put).toHaveBeenLastCalledWith("/dialect/participants/8", { verified: false, risk: "clear", review_region: "Đà Nẵng", role: "annotator" }, { headers: { "X-Account-ID": "7" } });
+    await expect(execute({ type: "person", person: { ...reviewer, role: "admin" } }, state, me)).rejects.toThrow(/Reviewer/);
 
     await execute({ type: "release", release: { id: "x", ids: ["c:1"], records: [{ id: "c:1", raw: blankRaw(), split: "test" }], checksum: "", at: "", dataCard: "card" } }, state, me);
-    expect(post).toHaveBeenLastCalledWith("/dialect/releases", { ids: [1], splits: { "1": "test" }, data_card: "card" });
+    expect(post).toHaveBeenLastCalledWith("/dialect/releases", { ids: [1], splits: { "1": "test" }, data_card: "card" }, { headers: { "X-Account-ID": "7" } });
+    await execute({ type: "release", release: { id: "x", ids: ["c:1"], records: [], checksum: "", at: "", dataCard: "card", previewDigest: "b".repeat(64) } }, state, me);
+    expect(post).toHaveBeenLastCalledWith("/dialect/releases", { ids: [1], splits: {}, data_card: "card", preview_digest: "b".repeat(64) }, { headers: { "X-Account-ID": "7" } });
   });
 
   it("refuses local-only ids and account switching", async () => {
@@ -158,5 +167,184 @@ describe("server game allocation", () => {
     // A pick the browser can no longer run falls back to the local balance.
     const closed = applyCommand(state, { type: "autoStart", id: "p2", consent: { ...consentDefault(), collect: true, train: true }, campaignId: "", examId: "dataset1-daily" });
     expect(closed.sessions[0].exam.id).toBe("dataset1-bank-01");
+  });
+});
+
+describe("durable upload safety", () => {
+  it("does not upload old unconfirmed items; keeps other accounts and discarded history", async () => {
+    const post = vi.spyOn(apiClient, "post");
+    const state = prepareOutbox(stateWith([local("old"), local("b", "account:8"), local("discarded", "account:7", true)]), 7);
+    await flush(state, 7);
+    expect(post).not.toHaveBeenCalled();
+    const merged = merge(state, snap());
+    expect(merged.contributions.map((c) => c.id)).toEqual(["c:1", "old", "b", "discarded"]);
+    expect(prepareOutbox(state, 7, new Set(["old"])).contributions[1].sync).toBeUndefined();
+  });
+  it.each([401, 429, 503, 0])("keeps transient %s failures and retries the identical request", async (status) => {
+    const post = vi.spyOn(apiClient, "post").mockRejectedValueOnce(status ? httpError(status) : new AxiosError("Network Error")).mockResolvedValue({ data: {} });
+    let state = prepareOutbox(stateWith([local("key")]), 7, new Set(["key"]));
+    const result = await flush(state, 7);
+    expect(result.updates.get("key")?.status).toBe("retry");
+    state.contributions[0].sync = result.updates.get("key");
+    state.contributions[0].raw.text = "changed locally";
+    state = prepareOutbox(state, 7);
+    await flush(state, 7);
+    expect(post.mock.calls[1][1]).toEqual(post.mock.calls[0][1]);
+    expect(post.mock.calls[1][1]).toMatchObject({ original_text: "rứa", idempotency_key: "key" });
+  });
+  it("keeps a rejected RAW and reason without automatic retries", async () => {
+    const post = vi.spyOn(apiClient, "post").mockRejectedValue(httpError(422));
+    const state = prepareOutbox(stateWith([local("bad")]), 7, new Set(["bad"]));
+    const result = await flush(state, 7);
+    state.contributions[0].sync = result.updates.get("bad");
+    await flush(state, 7);
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(state.contributions[0]).toMatchObject({ raw: { text: "rứa" }, sync: { status: "rejected", reason: "Không hợp lệ", attempts: 1 } });
+    expect(merge(state, snap()).contributions.find((c) => c.id === "bad")).toEqual(state.contributions[0]);
+  });
+  it("does not continue uploads after account binding is invalidated", async () => {
+    let active = true;
+    const post = vi.spyOn(apiClient, "post").mockImplementation(async () => { active = false; return { data: {} }; });
+    const state = prepareOutbox(stateWith([local("a"), local("b")]), 7, new Set(["a", "b"]));
+    await flush(state, 7, { active: () => active });
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+  it("includes question metadata only when present", async () => {
+    const post = vi.spyOn(apiClient, "post").mockResolvedValue({ data: {} });
+    const state = stateWith([local("plain"), local("metadata")]);
+    state.contributions[1].raw.questionKind = "collect";
+    const prepared = prepareOutbox(state, 7, new Set(["plain", "metadata"]));
+    await flush(prepared, 7);
+    expect(post.mock.calls[0][1]).not.toHaveProperty("question_kind");
+    expect(post.mock.calls[1][1]).toHaveProperty("question_kind", "collect");
+  });
+});
+
+describe("workspace pagination", () => {
+  it("aggregates every collection independently, dedups, and keeps first-page stats", async () => {
+    const stats = { started_sessions: 3, submitted_sessions: 2, withdrawn_sessions: 0, valid_samples: 1, definitions: {} };
+    const get = vi.spyOn(apiClient, "get").mockResolvedValueOnce({ data: snap({ next_cursor: "opaque-1", stats }) }).mockResolvedValueOnce({ data: snap({ contributions: [serverItem(1), serverItem(2)], people: [person(8)], sources: [], next_cursor: "opaque-2" }) }).mockResolvedValueOnce({ data: snap({ contributions: [], people: [], sources: [{ id: 99, evidence: "", rights_confirmed: false, title: "late", public: false, audio: false }], next_cursor: null }) });
+    const result = await snapshot(undefined, 7);
+    expect(result.contributions.map((c) => c.id)).toEqual([1, 2]);
+    expect(result.people.map((p) => p.id)).toEqual([7, 8]);
+    expect(result.sources.map((s) => s.id)).toEqual([31, 99]);
+    expect(result.stats).toEqual(stats);
+    expect(get.mock.calls[1][1]).toMatchObject({ params: { limit: 100, cursor: "opaque-1" }, headers: { "X-Account-ID": "7" } });
+  });
+  it("fails closed on repeated cursors and account changes", async () => {
+    const get = vi.spyOn(apiClient, "get").mockResolvedValue({ data: snap({ next_cursor: "loop" }) });
+    await expect(snapshot()).rejects.toThrow(/phân trang/);
+    expect(get).toHaveBeenCalledTimes(2);
+    get.mockReset().mockResolvedValueOnce({ data: snap({ next_cursor: "next" }) }).mockResolvedValueOnce({ data: snap({ me: person(8) }) });
+    await expect(snapshot()).rejects.toThrow(/đăng nhập/);
+  });
+});
+
+describe("durable lifecycle receipts", () => {
+  it("records starts/submits even without samples, never invents historical starts", async () => {
+    const state = seed();
+    const { applyCommand } = await import("../src/features/demo/domain");
+    const started = applyCommand(state, { type: "autoStart", id: "allocated", consent: { ...consentDefault(), collect: true, train: true }, campaignId: "" });
+    started.sessions[0].owner = "account:7";
+    started.sessions[0].serverAllocated = true;
+    started.sessions[0].receipts = { started: {}, submitted: {} };
+    started.sessions.push({ ...structuredClone(started.sessions[0]), id: "historical", serverAllocated: false });
+    const post = vi.spyOn(apiClient, "post").mockResolvedValue({ data: {} });
+    const updates = await flushReceipts(started, 7, new AbortController().signal, () => true);
+    expect(post.mock.calls.map((c) => c[0])).toEqual(["/dialect/sessions/allocated/started", "/dialect/sessions/allocated/submitted"]);
+    expect(post.mock.calls.every((c) => c[2]?.headers?.["X-Account-ID"] === "7")).toBe(true);
+    expect(updates.get("allocated")).toMatchObject({ started: { done: true }, submitted: { done: true } });
+    expect(updates.has("historical")).toBe(false);
+  });
+  it("keeps failed starts and does not submit before start acknowledgement", async () => {
+    const { applyCommand } = await import("../src/features/demo/domain");
+    const state = applyCommand(seed(), { type: "autoStart", id: "allocated", consent: { ...consentDefault(), collect: true, train: true }, campaignId: "" });
+    Object.assign(state.sessions[0], { owner: "account:7", serverAllocated: true, receipts: { started: {}, submitted: {} } });
+    const post = vi.spyOn(apiClient, "post").mockRejectedValue(httpError(429));
+    const updates = await flushReceipts(state, 7, new AbortController().signal, () => true);
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(updates.get("allocated")?.started).toMatchObject({ attempts: 1, reason: "Không hợp lệ" });
+    expect(updates.get("allocated")?.submitted?.done).not.toBe(true);
+  });
+});
+
+
+describe("account projection", () => {
+  it("shows server-synchronized plays to Reviewers while keeping other accounts' local drafts private", async () => {
+    const { applyCommand } = await import("../src/features/demo/domain");
+    const base = applyCommand(seed(), { type: "start", id: "played", examId: "exam-demo", consent: { ...consentDefault(), collect: true, train: true }, campaignId: "" });
+    const sample = base.sessions[0];
+    const state = merge(base, snap({ me: person(7, "reviewer"), people: [person(7, "reviewer")] }));
+    state.sessions = [
+      { ...sample, id: "mine", owner: "account:7" },
+      { ...sample, id: "remote", owner: "account:8", serverRevision: 1 },
+      { ...sample, id: "private-draft", owner: "account:8", serverRevision: undefined },
+    ];
+    expect(accountView(state, 7).sessions.map(s => s.id)).toEqual(["mine", "remote"]);
+    state.people.find(p => p.id === "account:7")!.role = "contributor";
+    expect(accountView(state, 7).sessions.map(s => s.id)).toEqual(["mine"]);
+    expect(accountView({ ...state, serverAccountId: 8 }, 7).sessions.map(s => s.id)).toEqual(["mine"]);
+    expect(accountView(state, null).sessions).toEqual([]);
+  });
+  it("preserves other-account outbox durably but never exposes it or the old snapshot", () => {
+    const state = merge(stateWith([local("mine"), local("other", "account:8")]), snap());
+    expect(state.contributions.some((c) => c.id === "other")).toBe(true);
+    expect(accountView(state, 7).contributions.map((c) => c.id)).toEqual(["c:1", "mine"]);
+    const switched = accountView({ ...state, actor: "account:8" }, 8);
+    expect(switched.contributions.map((c) => c.id)).toEqual(["other"]);
+    expect(switched.serverStats).toBeUndefined();
+    expect(switched.people.some((p) => p.id === "account:7")).toBe(false);
+    expect(accountView(state, null).contributions).toEqual([]);
+    expect(state.contributions.map((c) => c.id)).toEqual(["c:1", "mine", "other"]);
+  });
+});
+
+
+describe("owner transport guard", () => {
+  it("freezes the expected owner for new payloads and preserves legacy frozen payloads", async () => {
+    const post = vi.spyOn(apiClient, "post").mockResolvedValue({ data: {} });
+    const state = prepareOutbox(stateWith([local("new-guard"), local("legacy")]), 7, new Set(["new-guard", "legacy"]));
+    const legacy = { ...state.contributions[1].sync!.payload };
+    delete legacy.expected_owner_id;
+    state.contributions[1].sync!.payload = legacy;
+    const retry = prepareOutbox(state, 7);
+    await flush(retry, 7);
+    expect(post.mock.calls[0][1]).toMatchObject({ expected_owner_id: 7, idempotency_key: "new-guard" });
+    expect(post.mock.calls[1][1]).toEqual(legacy);
+    expect(post.mock.calls.slice(0, 2).every((c) => c[2]?.headers?.["X-Account-ID"] === "7")).toBe(true);
+    expect(post.mock.calls[1][1]).not.toHaveProperty("expected_owner_id");
+    await flush(prepareOutbox(retry, 7), 7);
+    expect(post.mock.calls[2][1]).toEqual(post.mock.calls[0][1]);
+    expect(post.mock.calls[3][1]).toEqual(legacy);
+  });
+});
+
+
+describe("request-local command account scope", () => {
+  it("binds concurrent admin operations to their originating accounts without global defaults", async () => {
+    const post = vi.spyOn(apiClient, "post").mockResolvedValue({ data: {} });
+    const put = vi.spyOn(apiClient, "put").mockResolvedValue({ data: {} });
+    const defaults = structuredClone(apiClient.defaults.headers.common);
+    await Promise.all([
+      execute({ type: "rewardPolicy", enabled: true }, seed(), me),
+      execute({ type: "feedback", entity: "x", text: "test" }, seed(), { ...me, id: 8 }),
+    ]);
+    expect(put).toHaveBeenCalledWith("/dialect/rewards/policy", { enabled: true }, { headers: { "X-Account-ID": "7" } });
+    expect(post).toHaveBeenCalledWith("/dialect/feedback", { entity: "x", text: "test" }, { headers: { "X-Account-ID": "8" } });
+    expect(apiClient.defaults.headers.common).toEqual(defaults);
+  });
+});
+
+
+describe("allocation account scope", () => {
+  it("adds the account header only when provided", async () => {
+    const { allocate } = await import("../src/features/demo/server");
+    const post = vi.spyOn(apiClient, "post").mockResolvedValue({ data: { session_ref: "s", exam_id: "e", plays: 0, repeat: false } });
+    const body = { session_ref: "s", exam_ids: ["e"], played: [], campaign_id: "" };
+    await allocate("s", ["e"], [], "", 7);
+    expect(post).toHaveBeenLastCalledWith("/dialect/allocation", body, { headers: { "X-Account-ID": "7" } });
+    await allocate("s", ["e"], [], "");
+    expect(post).toHaveBeenLastCalledWith("/dialect/allocation", body);
+    expect(post.mock.calls[1]).toHaveLength(2);
   });
 });

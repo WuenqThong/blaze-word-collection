@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+import hashlib
+import hmac
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -19,11 +21,16 @@ def verify_password(plain: str, hashed: str) -> bool:
     return _pwd_ctx.verify(plain, hashed)
 
 
-def create_access_token(user_id: int, role: str) -> str:
+def credential_fingerprint(password_hash: str) -> str:
+    return hmac.new(settings.jwt_secret.encode(), password_hash.encode(), hashlib.sha256).hexdigest()
+
+
+def create_access_token(user_id: int, role: str, password_hash: str) -> str:
     now = datetime.now(timezone.utc)
     payload = {
         "sub": str(user_id),
         "role": role,
+        "pwd": credential_fingerprint(password_hash),
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(minutes=settings.access_token_ttl_min)).timestamp()),
     }

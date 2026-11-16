@@ -3,7 +3,8 @@ import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { AxiosError, AxiosHeaders, type InternalAxiosRequestConfig } from "axios";
 import { apiClient, errorMessage, SESSION_EXPIRED_EVENT, SESSION_EXPIRED_MESSAGE } from "../src/api/client";
 import { authApi } from "../src/api/auth";
-import { AuthProvider, useAuth } from "../src/features/auth/AuthContext";
+import { AuthProvider } from "../src/features/auth/AuthProvider";
+import { useAuth } from "../src/features/auth/AuthContext";
 
 const user = { id: 1, email: "a@example.com", full_name: "Người chơi", role: "annotator" as const, created_at: "", last_login_at: null };
 const reply401 = (config: InternalAxiosRequestConfig) =>

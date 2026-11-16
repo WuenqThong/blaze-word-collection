@@ -108,7 +108,7 @@ export function WithdrawalsPage() {
                     {w.paid_at && ` · chuyển ${fmtDateTime(w.paid_at)}`}
                   </div>
                   {w.note && <div className="ledger-note">Bạn ghi: {w.note}</div>}
-                  {w.admin_note && <div className="ledger-note">Admin: {w.admin_note}</div>}
+                  {w.admin_note && <div className="ledger-note">Quản trị viên: {w.admin_note}</div>}
                 </div>
                 <div>
                   <span className={`status-pill ${status.cls}`}>{status.text}</span>

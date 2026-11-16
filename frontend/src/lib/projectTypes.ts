@@ -26,12 +26,12 @@ export interface Project {
 export const KIND_META: Record<ProjectKind, { label: string; desc: string; icon: string }> = {
   annotate: {
     label: "Gán nhãn",
-    desc: "Upload audio, annotator nghe + gán nhãn / xác minh / Q&A.",
+    desc: "Tải lên âm thanh, người gán nhãn nghe + gán nhãn / xác minh / Q&A.",
     icon: "bi-tag",
   },
   collect: {
     label: "Thu thập",
-    desc: "Annotator nói chuyện với agent role-play; phiên được ghi âm và lưu lại.",
+    desc: "Người gán nhãn nói chuyện với agent vai trò-play; phiên được ghi âm và lưu lại.",
     icon: "bi-mic",
   },
 };
@@ -46,18 +46,18 @@ export interface ProjectMember {
 
 export const TASK_TYPE_LABELS: Record<TaskType, { title: string; desc: string; icon: string }> = {
   audio_label: {
-    title: "Gán nhãn audio (label/transcript)",
-    desc: "Nghe audio và nhập text hoặc chọn nhãn.",
+    title: "Gán nhãn âm thanh (nhãn/bản chép lời)",
+    desc: "Nghe âm thanh và nhập văn bản hoặc chọn nhãn.",
     icon: "bi-mic",
   },
   audio_verify: {
-    title: "Xác minh audio (true/false)",
-    desc: "Nghe audio + nhãn gợi ý, xác nhận đúng/sai.",
+    title: "Xác minh âm thanh (đúng/sai)",
+    desc: "Nghe âm thanh + nhãn gợi ý, xác nhận đúng/sai.",
     icon: "bi-check2-square",
   },
   qa: {
     title: "Hỏi đáp (Q&A)",
-    desc: "Trả lời câu hỏi dựa trên audio hoặc văn bản.",
+    desc: "Trả lời câu hỏi dựa trên âm thanh hoặc văn bản.",
     icon: "bi-chat-square-text",
   },
 };

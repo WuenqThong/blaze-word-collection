@@ -133,7 +133,7 @@ class RolePlayService:
                 Project.kind == "collect",
             )
         )
-        if user.role != "admin":
+        if user.role not in ('admin', 'reviewer'):
             member_ids = {
                 row.project_id
                 for row in self.db.query(ProjectMember.project_id)
@@ -389,7 +389,7 @@ class RolePlayService:
         client_id: Optional[str] = None,
         error: Optional[str] = None,
     ) -> RolePlayTask:
-        if task.user_id != user.id and user.role != "admin":
+        if task.user_id != user.id and user.role not in ('admin', 'reviewer'):
             raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không phải task của bạn")
         if task.status in ("ended", "failed"):
             return task
@@ -413,7 +413,7 @@ class RolePlayService:
         size_bytes: int,
         content_type: Optional[str],
     ) -> RolePlayTask:
-        if task.user_id != user.id and user.role != "admin":
+        if task.user_id != user.id and user.role not in ('admin', 'reviewer'):
             raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không phải task của bạn")
         if size_bytes <= 0:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="File rỗng")
@@ -500,7 +500,7 @@ class RolePlayService:
         rating: int,
         note: Optional[str],
     ) -> RolePlayTask:
-        if task.user_id != user.id and user.role != "admin":
+        if task.user_id != user.id and user.role not in ('admin', 'reviewer'):
             raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Không phải task của bạn")
         task.report_rating = rating
         task.report_note = (note or "").strip() or None

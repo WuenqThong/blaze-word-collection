@@ -6,48 +6,46 @@ export function HomeDemo() {
     <>
       <section className="demo-home-hero">
         <div>
-          <p className="page-eyebrow">QUẢNG NAM — ĐÀ NẴNG / APPDICHTHUAT</p>
           <h1>
             Tiếng quê mình,
             <br />
             <span>chơi để cùng góp.</span>
           </h1>
           <p>
-            Mười câu hỏi từ cách nói quen thuộc đến câu chuyện của bạn. Đăng
-            nhập để bắt đầu; mỗi đóng góp đều được giữ nguồn và ngữ
-            cảnh.
+            Chơi 10 câu hỏi hoặc góp trực tiếp một cách nói bạn biết.
           </p>
           <div className="demo-actions">
             <Link className="btn btn-primary" to="/demo/play">
-              Chơi game 10 câu{" "}
+              Chơi trò chơi 10 câu{" "}
               <i className="bi bi-arrow-right" aria-hidden="true" />
             </Link>
+            <Link className="btn btn-outline-primary" to="/demo/contribute">Góp trực tiếp</Link>
           </div>
         </div>
         <Panel title="10 câu, nhiều cách đóng góp">
           <ol className="demo-home-steps">
             <li>
-              <strong>01—03</strong>
+              <strong>01</strong>
               <span>
-                Hiểu cách nói quen thuộc
+                Trả lời câu hỏi
                 <br />
-                <small>Hiệu chỉnh, chấp nhận biến thể.</small>
+                <small>Cách nói phổ thông bạn biết.</small>
               </span>
             </li>
             <li>
-              <strong>04—08</strong>
+              <strong>02</strong>
               <span>
-                Giải nghĩa & diễn đạt
+                Giải thích cách dùng
                 <br />
-                <small>Hai câu kiểm tra xen kẽ.</small>
+                <small>Nêu nghĩa hoặc ví dụ.</small>
               </span>
             </li>
             <li>
-              <strong>09—10</strong>
+              <strong>03</strong>
               <span>
-                Góp từ và câu mới
+                Gửi đóng góp
                 <br />
-                <small>Giữ nguyên lời và bối cảnh.</small>
+                <small>Người duyệt sẽ kiểm tra.</small>
               </span>
             </li>
           </ol>
@@ -63,36 +61,35 @@ export function RightsDemo() {
       <Heading title="Bạn hiểu rõ dữ liệu được dùng ra sao." />
       <Panel title="Tham gia và phạm vi">
         <p>
-          Đăng nhập hoặc đăng ký tài khoản trước khi chơi. Tiếp nhận là điều kiện
-          lưu mẫu; training/công khai/audio là lựa chọn độc lập, mặc định tắt.
+          Đăng nhập hoặc đăng ký trước khi chơi. Bạn cần tự tích đồng ý tiếp nhận, kiểm duyệt và huấn luyện. Công khai nội dung và sử dụng âm thanh là các lựa chọn riêng, mặc định tắt.
         </p>
         <p>
-          RAW giữ nguyên. Bổ sung tạo phiên bản mới; reviewer độc lập, không tự
-          duyệt. Chỉ bản chuẩn hóa đủ QA/quyền mới vào từ điển demo hoặc bản
-          xuất demo.
+          Bản gốc giữ nguyên. Bổ sung tạo phiên bản mới; người duyệt độc lập, không tự
+          duyệt. Chỉ bản chuẩn hóa đủ Kiểm tra chất lượng/quyền mới vào từ điển minh họa hoặc bản
+          xuất minh họa.
         </p>
       </Panel>
       <Panel title="Rút mẫu, khôi phục và bản lưu">
         <p>
-          Lịch sử cho phép rút từng mẫu/lượt hoặc thay riêng phạm vi consent.
+          Lịch sử cho phép rút từng mẫu/lượt hoặc thay riêng phạm vi phạm vi đồng ý.
           Bản xuất mất điều kiện sẽ bị chặn tải. Không thể tự xóa bản đã tải ra
           ngoài.
         </p>
         <p>
           Kho này nằm trên trình duyệt, không có bảo mật nhận dạng người thật.
           Mã khôi phục và chuyển vai trò chỉ để quản lý trải nghiệm luồng. Có
-          thể xuất/nhập backup tại Vận hành.
+          thể xuất/nhập sao lưu tại Vận hành.
         </p>
       </Panel>
-      <Panel title="Credit và AI">
+      <Panel title="Lượt sử dụng và AI">
         <p>
-          Đăng ký hoặc chơi xong không được tặng credit. Hạn mức AI nội bộ chỉ
+          Đăng ký hoặc chơi xong không được tặng lượt sử dụng. Hạn mức AI nội bộ chỉ
           mô phỏng khi tài khoản được xác nhận, mẫu không trùng đủ chất lượng,
           rủi ro đã rà soát và chính sách được bật. Không chuyển nhượng/đổi
           tiền.
         </p>
         <p>
-          Dịch, ASR, model và pipeline ở đây là mô phỏng phục vụ duyệt frontend.
+          Dịch, Nhận dạng giọng nói, mô hình và quy trình xử lý ở đây là mô phỏng phục vụ duyệt giao diện.
           Không gọi nhà cung cấp hoặc chạy huấn luyện thật.
         </p>
       </Panel>
@@ -108,12 +105,11 @@ function RightsServer() {
       <Panel title="Dữ liệu lưu ở đâu">
         <p>
           Cần đăng nhập để chơi. Câu trả lời, lựa chọn đồng ý, phiếu duyệt và
-          lịch sử được lưu trên máy chủ, gắn với tài khoản của bạn. Tệp âm
-          thanh hoặc ảnh bạn đính kèm hiện chỉ lưu trên trình duyệt này.
+          lịch sử được lưu trên máy chủ, gắn với tài khoản của bạn. Pilot hiện chỉ thu văn bản; chưa tiếp nhận bản ghi âm, ảnh hoặc đoạn phim.
         </p>
         <p>
-          Người duyệt (reviewer) và quản trị viên đọc được nội dung mẫu để kiểm
-          tra. Họ không thấy mật khẩu của bạn. Người duyệt không duyệt mẫu của
+          Người kiểm duyệt đọc được nội dung mẫu để kiểm
+          tra. Họ không thấy mật khẩu của bạn. Người kiểm duyệt không duyệt mẫu của
           chính mình.
         </p>
       </Panel>
@@ -139,7 +135,7 @@ function RightsServer() {
       </Panel>
       <Panel title="Hạn mức AI">
         <p>
-          Đăng ký hoặc chơi xong không được tặng hạn mức. Quản trị viên chỉ cấp
+          Đăng ký hoặc chơi xong không được tặng hạn mức. Người kiểm duyệt chỉ cấp
           hạn mức AI nội bộ khi tài khoản đã được xác nhận, mẫu đạt chất lượng
           và không trùng, và chính sách hạn mức đang bật. Hạn mức không đổi
           được thành tiền và không chuyển cho người khác.

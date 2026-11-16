@@ -1,0 +1,243 @@
+[
+  {
+    "name": "valid mô",
+    "raw": {
+      "kind": "word",
+      "original_text": "mô",
+      "method": "game"
+    },
+    "reasons": []
+  },
+  {
+    "name": "valid ơ",
+    "raw": {
+      "kind": "word",
+      "original_text": "ơ",
+      "method": "game"
+    },
+    "reasons": []
+  },
+  {
+    "name": "valid ứ",
+    "raw": {
+      "kind": "word",
+      "original_text": "ứ",
+      "method": "game"
+    },
+    "reasons": []
+  },
+  {
+    "name": "valid a",
+    "raw": {
+      "kind": "word",
+      "original_text": "a",
+      "method": "game"
+    },
+    "reasons": []
+  },
+  {
+    "name": "valid ni",
+    "raw": {
+      "kind": "word",
+      "original_text": "ni",
+      "method": "game"
+    },
+    "reasons": []
+  },
+  {
+    "name": "valid đi",
+    "raw": {
+      "kind": "word",
+      "original_text": "đi",
+      "method": "game"
+    },
+    "reasons": []
+  },
+  {
+    "name": "valid ư",
+    "raw": {
+      "kind": "word",
+      "original_text": "ư",
+      "method": "game"
+    },
+    "reasons": []
+  },
+  {
+    "name": "valid mô?",
+    "raw": {
+      "kind": "word",
+      "original_text": "mô?",
+      "method": "game"
+    },
+    "reasons": []
+  },
+  {
+    "name": "valid ơ ơ",
+    "raw": {
+      "kind": "word",
+      "original_text": "ơ ơ",
+      "method": "game"
+    },
+    "reasons": []
+  },
+  {
+    "name": "valid hahaha",
+    "raw": {
+      "kind": "word",
+      "original_text": "hahaha",
+      "method": "game"
+    },
+    "reasons": []
+  },
+  {
+    "name": "valid qwertyuiop",
+    "raw": {
+      "kind": "word",
+      "original_text": "qwertyuiop",
+      "method": "game"
+    },
+    "reasons": []
+  },
+  {
+    "name": "valid tôi đang nói",
+    "raw": {
+      "kind": "word",
+      "original_text": "tôi đang nói",
+      "method": "game"
+    },
+    "reasons": []
+  },
+  {
+    "name": "symbols",
+    "raw": {
+      "original_text": "?!…"
+    },
+    "reasons": [
+      "punctuation_only"
+    ]
+  },
+  {
+    "name": "repeat",
+    "raw": {
+      "original_text": "aaaaaa"
+    },
+    "reasons": [
+      "repeated_noise"
+    ]
+  },
+  {
+    "name": "repeated token",
+    "raw": {
+      "original_text": "abcabcabcabc"
+    },
+    "reasons": [
+      "repeated_noise"
+    ]
+  },
+  {
+    "name": "keys",
+    "raw": {
+      "original_text": "qwerty"
+    },
+    "reasons": [
+      "keyboard_mash"
+    ]
+  },
+  {
+    "name": "reverse keys",
+    "raw": {
+      "original_text": "ytrewq"
+    },
+    "reasons": [
+      "keyboard_mash"
+    ]
+  },
+  {
+    "name": "explanation missing",
+    "raw": {
+      "original_text": "mô",
+      "question_kind": "explanation"
+    },
+    "reasons": [
+      "missing_context"
+    ]
+  },
+  {
+    "name": "open word missing",
+    "raw": {
+      "original_text": "mô",
+      "question_kind": "OPEN_WORD"
+    },
+    "reasons": [
+      "missing_context"
+    ]
+  },
+  {
+    "name": "explanation context",
+    "raw": {
+      "original_text": "mô",
+      "question_kind": "explanation",
+      "context": "Hỏi nơi chốn."
+    },
+    "reasons": []
+  },
+  {
+    "name": "minimal lexeme",
+    "raw": {
+      "original_text": "mô",
+      "question_kind": "LEXEME",
+      "question_format": "open",
+      "method": "game"
+    },
+    "reasons": []
+  },
+  {
+    "name": "controls",
+    "raw": {
+      "original_text": "mô\u0000"
+    },
+    "reasons": [
+      "invalid_control"
+    ]
+  },
+  {
+    "name": "zero width",
+    "raw": {
+      "original_text": "mô​"
+    },
+    "reasons": [
+      "invalid_control"
+    ]
+  },
+  {
+    "name": "whitespace",
+    "raw": {
+      "original_text": "mô\n\tơ\r"
+    },
+    "reasons": []
+  },
+  {
+    "name": "unknown",
+    "raw": {
+      "response": "unknown",
+      "original_text": "",
+      "question_kind": "OPEN_WORD"
+    },
+    "reasons": []
+  },
+  {
+    "name": "meaning noise",
+    "raw": {
+      "original_text": "mô",
+      "meaning": "asdfgh"
+    },
+    "reasons": [
+      "keyboard_mash"
+    ]
+  },
+  {
+    "name": "empty",
+    "raw": {},
+    "reasons": []
+  }
+]

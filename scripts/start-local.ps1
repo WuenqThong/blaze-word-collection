@@ -1,30 +1,52 @@
+param([switch]$SkipBuild)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
+$backendRoot = Join-Path $projectRoot 'backend'
+$frontendRoot = Join-Path $projectRoot 'frontend'
+$python = Join-Path $backendRoot '.venv/Scripts/python.exe'
+$dist = Join-Path $frontendRoot 'dist'
 $logDirectory = Join-Path $env:TEMP 'blaze-local-dev'
 New-Item -ItemType Directory -Force -Path $logDirectory | Out-Null
-
-function Test-LocalService([string]$Address) {
-    try { return (Invoke-WebRequest -Uri $Address -UseBasicParsing -TimeoutSec 2).StatusCode -eq 200 }
-    catch { return $false }
+if (-not (Test-Path -LiteralPath $python)) { throw 'Missing backend/.venv. Install backend dependencies first.' }
+if (-not $SkipBuild) {
+    $buildNames = @('VITE_API_BASE_URL', 'VITE_DEMO_SERVER', 'VITE_ENABLE_LEGACY')
+    $buildPrevious = @{}
+    foreach ($name in $buildNames) { $buildPrevious[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
+    try {
+        $env:VITE_API_BASE_URL = '/api'
+        $env:VITE_DEMO_SERVER = 'on'
+        $env:VITE_ENABLE_LEGACY = 'off'
+        Push-Location $frontendRoot
+        try { & npm.cmd run build; if ($LASTEXITCODE -ne 0) { throw 'Frontend build failed. Existing service left running.' } }
+        finally { Pop-Location }
+    } finally {
+        foreach ($name in $buildNames) { [Environment]::SetEnvironmentVariable($name, $buildPrevious[$name], 'Process') }
+    }
 }
-
-if (-not (Test-LocalService 'http://127.0.0.1:8765/api/health')) {
-    $python = Join-Path $projectRoot 'backend/.venv/Scripts/python.exe'
-    if (-not (Test-Path -LiteralPath $python)) { throw 'Chưa có backend/.venv. Cài dependencies backend theo README trước.' }
-    Start-Process -FilePath $python -ArgumentList @('-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8765') -WorkingDirectory (Join-Path $projectRoot 'backend') -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logDirectory 'backend.out.log') -RedirectStandardError (Join-Path $logDirectory 'backend.err.log') | Out-Null
+if (-not (Test-Path -LiteralPath (Join-Path $dist 'index.html'))) { throw 'Missing frontend build. Run without -SkipBuild.' }
+foreach ($port in @(7777, 8765)) {
+    foreach ($listener in (Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction SilentlyContinue)) {
+        $process = Get-CimInstance Win32_Process -Filter "ProcessId=$($listener.OwningProcess)"
+        $parent = Get-CimInstance Win32_Process -Filter "ProcessId=$($process.ParentProcessId)"
+        $ownedNode = $process.CommandLine -like "*$frontendRoot*node_modules*vite*"
+        $ownedPython = ($process.CommandLine -match 'uvicorn app.main:app|scripts.serve') -and (($process.CommandLine -like "*$python*") -or ($parent.CommandLine -like "*$python*"))
+        if (-not ($ownedNode -or $ownedPython)) { throw "Port $port belongs to another application; left unchanged." }
+        Stop-Process -Id $process.ProcessId -Force
+    }
 }
-
-if (-not (Test-LocalService 'http://localhost:7777/')) {
-    $node = (Get-Command node -ErrorAction Stop).Source
-    $vite = Join-Path $projectRoot 'frontend/node_modules/vite/bin/vite.js'
-    if (-not (Test-Path -LiteralPath $vite)) { throw 'Chưa có dependencies frontend. Chạy npm install trong frontend trước.' }
-    Start-Process -FilePath $node -ArgumentList @(('"' + $vite + '"')) -WorkingDirectory (Join-Path $projectRoot 'frontend') -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logDirectory 'frontend.out.log') -RedirectStandardError (Join-Path $logDirectory 'frontend.err.log') | Out-Null
-}
-
+$previousDist = [Environment]::GetEnvironmentVariable('FRONTEND_DIST', 'Process')
+try {
+    $env:FRONTEND_DIST = $dist
+    Start-Process -FilePath $python -ArgumentList @('-m', 'scripts.serve', '--host', '127.0.0.1', '--port', '7777') -WorkingDirectory $backendRoot -WindowStyle Hidden -RedirectStandardOutput (Join-Path $logDirectory 'app.out.log') -RedirectStandardError (Join-Path $logDirectory 'app.err.log') | Out-Null
+} finally { [Environment]::SetEnvironmentVariable('FRONTEND_DIST', $previousDist, 'Process') }
 $ready = $false
-for ($attempt = 0; $attempt -lt 20; $attempt++) {
-    if ((Test-LocalService 'http://127.0.0.1:8765/api/health') -and (Test-LocalService 'http://localhost:7777/api/health')) { $ready = $true; break }
+for ($attempt = 0; $attempt -lt 30; $attempt++) {
+    try {
+        $health = Invoke-WebRequest 'http://127.0.0.1:7777/api/health' -UseBasicParsing -TimeoutSec 2
+        $page = Invoke-WebRequest 'http://127.0.0.1:7777/login' -UseBasicParsing -TimeoutSec 2
+        if ($health.StatusCode -eq 200 -and $page.Content -match '<!doctype html>') { $ready = $true; break }
+    } catch { }
     Start-Sleep -Seconds 1
 }
-if (-not $ready) { throw "Chưa khởi động được đầy đủ. Xem log tại $logDirectory" }
-Write-Output 'Frontend + backend đã sẵn sàng: http://localhost:7777/demo'
+if (-not $ready) { throw "Startup failed. Logs: $logDirectory" }
+Write-Output 'Frontend + API ready on ONE port: http://localhost:7777/demo'

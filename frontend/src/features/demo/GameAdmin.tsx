@@ -1,15 +1,26 @@
 import { errorMessage } from "../../api/client";
-import { useState } from "react";
+import { displayLabel, systemText } from "../../lib/display";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useDemo } from "./context";
 import { examErrors, uid, isRepeatSession } from "./domain";
 import { verificationLabel } from "./datasetBank";
 import { examKinds, gateCount, QUESTION_KINDS, SOURCED_KINDS } from "./seed";
-import { Action, DemoGuard, Field, Heading, Panel, Status } from "./ui";
+import { Action, DemoGuard, Field, Heading, Panel, Status, ListPagination } from "./ui";
 import { AnswerTable } from "./GamePages";
 import type { Exam, Question } from "./types";
 import { formatLabels } from "./questionFormats";
 import { isTestSession } from "./testSessions";
+
+function useEditorFocus(id?: string) {
+  const element = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!id) return;
+    element.current?.focus({ preventScroll: true });
+    element.current?.scrollIntoView?.({ block: "start", behavior: "instant" });
+  }, [id]);
+  return element;
+}
 
 export function QuestionBank() {
   return (
@@ -22,6 +33,11 @@ function QuestionBankInner() {
   const { state } = useDemo();
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<Question | null>(null);
+  const editor = useEditorFocus(editing?.id);
+  const [page, setPage] = useState(1);
+  const filtered = state.questions.filter(q => q.prompt.toLowerCase().includes(query.toLowerCase()));
+  const pages = Math.max(1, Math.ceil(filtered.length / 10));
+  const currentPage = Math.min(page, pages);
   const fresh = (): Question => ({
     id: uid(),
     version: 1,
@@ -39,29 +55,28 @@ function QuestionBankInner() {
     <>
       <Heading title="Ngân hàng câu hỏi & hiệu chỉnh">
         <p>
-          Câu demo không trở thành gold thu thật chỉ vì được duyệt trong bản xem
-          trước.
+          Câu hỏi minh họa cần được xác minh riêng trước khi dùng làm câu kiểm tra chuẩn cho thu thập dữ liệu thật.
         </p>
       </Heading>
       <div className="demo-actions">
         <Action onClick={() => setEditing(fresh())}>Tạo câu hỏi</Action>
         <Field label="Tìm câu hỏi">
-          <input value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} />
         </Field>
       </div>
       <div className="demo-two-col">
         <Panel title="Các phiên bản câu hỏi">
-          {state.questions
-            .filter((q) => q.prompt.toLowerCase().includes(query.toLowerCase()))
+          <p className="demo-note">{filtered.length} câu hỏi</p>
+          {filtered.slice((currentPage - 1) * 10, currentPage * 10)
             .map((q) => (
               <div key={q.id} className="demo-list-row">
                 <div>
                   <strong>
-                    {q.kind} · v{q.version}
+                    {displayLabel(q.kind)} · phiên bản {q.version}
                   </strong>
                   <p>{q.prompt}</p>
                   <small>
-                    {q.approval} · {q.demo ? "DEMO" : "Thu thật"} · {q.region}
+                    {displayLabel(q.approval)} · {q.demo ? "Minh họa" : "Thu thật"} · {q.region}
                   </small>
                 </div>
                 <Action onClick={() => setEditing(q)}>Xem / sửa</Action>
@@ -70,6 +85,7 @@ function QuestionBankInner() {
                     setEditing({
                       ...q,
                       id: uid(),
+                      serverRevision: undefined,
                       version: q.version + 1,
                       approval: "DRAFT",
                     })
@@ -79,8 +95,10 @@ function QuestionBankInner() {
                 </Action>
               </div>
             ))}
+          {!filtered.length && <p>Không có câu hỏi phù hợp.</p>}
+          <ListPagination page={currentPage} pages={pages} onChange={setPage} label="câu hỏi" />
         </Panel>
-        {editing ? (
+        <div ref={editor} tabIndex={-1} className="catalog-editor" aria-label="Sửa câu hỏi">{editing ? (
           <QuestionEditor
             key={editing.id}
             question={editing}
@@ -92,7 +110,7 @@ function QuestionBankInner() {
               Câu đã nằm trong đề phát hành chỉ được nhân bản, không ghi đè.
             </p>
           </Panel>
-        )}
+        )}</div>
       </div>
     </>
   );
@@ -112,7 +130,7 @@ function QuestionEditor({
     (e) => e.status !== "draft" && e.questionIds.includes(q.id),
   );
   return (
-    <Panel title={`Câu ${q.id.slice(0, 12)} · v${q.version}`}>
+    <Panel title={`Câu hỏi · phiên bản ${q.version}`}>
       <form
         onSubmit={async (e) => {
           e.preventDefault();
@@ -163,9 +181,12 @@ function QuestionEditor({
               }
             >
               {[...new Set([...QUESTION_KINDS, ...SOURCED_KINDS])].map((k) => (
-                <option key={k}>{k}</option>
+                <option key={k} value={k}>{displayLabel(k)}</option>
               ))}
             </select>
+          </Field>
+          <Field label="Cách nói địa phương gốc (câu cố định)">
+            <textarea value={q.originalText ?? ""} maxLength={5000} required={!["OPEN_WORD", "OPEN_SENTENCE"].includes(q.kind)} onChange={e => setQ({ ...q, originalText: e.target.value })} />
           </Field>
           <Field label="Nội dung câu hỏi">
             <textarea
@@ -189,6 +210,7 @@ function QuestionEditor({
                 value={q.region}
                 onChange={(e) => setQ({ ...q, region: e.target.value })}
               >
+                {q.region && !state.regions.includes(q.region) && <option value={q.region}>{q.region}</option>}
                 {state.regions.map((v) => (
                   <option key={v}>{v}</option>
                 ))}
@@ -209,14 +231,14 @@ function QuestionEditor({
                 value={q.sourceId}
                 onChange={(e) => setQ({ ...q, sourceId: e.target.value })}
               >
-                {state.sources.map((s) => (
+                {state.sources.filter(s => !s.id.startsWith("s:")).map((s) => (
                   <option key={s.id} value={s.id}>
-                    {s.title}
+                    {s.title.replace(/Dataset1/g, "Bộ dữ liệu số 1")}
                   </option>
                 ))}
               </select>
             </Field>
-            <Field label="Duyệt trong demo">
+            <Field label="Duyệt trong minh họa">
               <select
                 value={q.approval}
                 onChange={(e) =>
@@ -227,7 +249,7 @@ function QuestionEditor({
                 }
               >
                 <option value="DRAFT">Chờ duyệt</option>
-                <option value="DEMO_APPROVED">Được dùng trong demo</option>
+                <option value="DEMO_APPROVED">Được dùng trong minh họa</option>
               </select>
             </Field>
             <Field label="Độ khó đề xuất">
@@ -262,7 +284,7 @@ function QuestionEditor({
         <p>{q.prompt}</p>
         {q.blankTemplate && q.format === "fill" && <p className="demo-blank-template">{q.blankTemplate}</p>}
         {q.format === "choice" ? <fieldset className="demo-choice-list"><legend>Chọn một đáp án</legend>{q.options?.map((o) => <label key={o.id} className="demo-choice"><input type="radio" name="preview-choice" /><span>{o.text}</span></label>)}</fieldset> : <Field label="Đáp án xem trước">{q.format === "short" || q.format === "fill" ? <input /> : <textarea />}</Field>}
-        {q.provenance && <p className="demo-note">{q.provenance.sheet} · {q.provenance.rowId} · {q.provenance.sense} · {verificationLabel[q.provenance.verification]} · Câu biên soạn. <a href={q.provenance.url} target="_blank" rel="noreferrer">Xem nguồn dataset</a></p>}
+        {q.provenance && <p className="demo-note">{systemText(q.provenance.sheet)} · {q.provenance.rowId} · {q.provenance.sense} · {verificationLabel[q.provenance.verification]} · Câu biên soạn. <a href={q.provenance.url} target="_blank" rel="noreferrer">Xem nguồn bộ dữ liệu</a></p>}
       </section>
       <details>
         <summary>Lịch sử câu này</summary>
@@ -270,7 +292,7 @@ function QuestionEditor({
           .filter((e) => e.entity === q.id)
           .map((e) => (
             <p key={e.id}>
-              {e.at} · {e.actor} · {e.note}
+              {e.at} · {e.actor} · {systemText(e.note)}
             </p>
           ))}
       </details>
@@ -288,6 +310,12 @@ export function ExamAdmin() {
 function ExamAdminInner() {
   const { state, run } = useDemo();
   const [editing, setEditing] = useState<Exam | null>(null);
+  const editor = useEditorFocus(editing?.id);
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const filtered = state.exams.filter(e => e.title.toLowerCase().includes(query.toLowerCase()));
+  const pages = Math.max(1, Math.ceil(filtered.length / 10));
+  const currentPage = Math.min(page, pages);
   const fresh = (): Exam => ({
     id: uid(),
     title: "Bộ đề mới",
@@ -304,22 +332,23 @@ function ExamAdminInner() {
     <>
       <Heading title="Đề 10 câu & điều kiện phát hành">
         <p>
-          Mỗi vị trí đúng loại. Phiên đang chơi luôn dùng snapshot của đề lúc
-          bắt đầu.
+          Mỗi vị trí dùng đúng loại câu hỏi. Lượt đang chơi giữ nguyên bộ đề đã lưu khi bắt đầu, kể cả khi bộ đề được cập nhật.
         </p>
       </Heading>
       <Action onClick={() => setEditing(fresh())}>Tạo bộ đề 10 câu</Action>
       <div className="demo-two-col">
         <Panel title="Bộ đề">
-          {state.exams.map((e) => (
+          <Field label="Tìm bộ đề"><input value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} /></Field>
+          <p className="demo-note">{filtered.length} bộ đề</p>
+          {filtered.slice((currentPage - 1) * 10, currentPage * 10).map((e) => (
             <div className="demo-contribution" key={e.id}>
               <h3>
-                {e.title} · v{e.version}
+                {e.title.replace(/Dataset1/g, "Bộ dữ liệu số 1")} · phiên bản {e.version}
               </h3>
               <Status value={e.status} />
               <p>
                 {e.mode === "strict" ? `Khóa ${gateCount(e)}/${gateCount(e)}` : "Tín hiệu chất lượng"} ·{" "}
-                {e.demo ? "DEMO" : "Thu thật"}
+                {e.demo ? "Minh họa" : "Thu thật"}
               </p>
               <div className="demo-actions">
                 <Action onClick={() => setEditing(e)}>Xem / cấu hình</Action>
@@ -328,6 +357,7 @@ function ExamAdminInner() {
                     setEditing({
                       ...e,
                       id: uid(),
+                      serverRevision: undefined,
                       version: e.version + 1,
                       title: `${e.title} · bản mới`,
                       status: "draft",
@@ -358,7 +388,7 @@ function ExamAdminInner() {
                         run({ type: "publish", id: e.id, real: false })
                       }
                     >
-                      Phát hành DEMO
+                      Phát hành Minh họa
                     </Action>
                     <Action
                       onClick={() =>
@@ -372,6 +402,7 @@ function ExamAdminInner() {
                         const copy = {
                           ...e,
                           id: uid(),
+                          serverRevision: undefined,
                           title: `Xem trước · ${e.title}`,
                           status: "draft" as const,
                         };
@@ -399,8 +430,10 @@ function ExamAdminInner() {
               </details>
             </div>
           ))}
+          {!filtered.length && <p>Không có bộ đề phù hợp.</p>}
+          <ListPagination page={currentPage} pages={pages} onChange={setPage} label="bộ đề" />
         </Panel>
-        {editing ? (
+        <div ref={editor} tabIndex={-1} className="catalog-editor" aria-label="Sửa bộ đề">{editing ? (
           <ExamEditor
             key={editing.id}
             exam={editing}
@@ -409,16 +442,13 @@ function ExamAdminInner() {
         ) : (
           <Panel title="Cấu trúc đề">
             <p>
-              Đề thường: Q01–03 GATE; Q04–05 LEXEME; Q06 GOLD; Q07 SENTENCE; Q08 GOLD; Q09
-              OPEN_WORD; Q10 OPEN_SENTENCE.
+              Đề thông thường gồm 3 câu kiểm tra đầu vào; 2 câu giải nghĩa từ; 2 câu kiểm tra đối chiếu xen kẽ 1 câu giải nghĩa câu; cuối cùng là 1 câu góp từ mới và 1 câu góp câu mới.
             </p>
             <p>
-              Kho Dataset1: Q01–02 GATE lấy từ mục đã đối chiếu nguồn (chấm điểm, mỗi lượt rút câu khác);
-              Q03–05 và Q08 LEXEME, Q06–07 SENTENCE, Q09 OPEN_WORD, Q10 OPEN_SENTENCE lấy từ mục chưa kiểm
-              chứng để người chơi xác nhận hoặc sửa.
+              Bộ dữ liệu số 1: câu 1–2 kiểm tra đầu vào từ nội dung đã đối chiếu nguồn. Người chơi trả lời đúng để tiếp tục; từ lần sai thứ 4 ở cùng một câu, hệ thống ghi nhận đề xuất đáp án mới và cho qua. Đề xuất chưa được tính là đáp án đúng, cần người duyệt kiểm tra. Câu 3–5 và câu 8 giải nghĩa từ; câu 6–7 giải nghĩa câu; câu 9 góp từ mới; câu 10 góp câu mới.
             </p>
           </Panel>
-        )}
+        )}</div>
       </div>
     </>
   );
@@ -429,7 +459,7 @@ function ExamEditor({ exam, done }: { exam: Exam; done: () => void }) {
   const [error, setError] = useState("");
   const locked = state.exams.some((x) => x.id === e.id && x.status !== "draft");
   return (
-    <Panel title={`Cấu hình v${e.version}`}>
+    <Panel title={`Cấu hình phiên bản ${e.version}`}>
       <form
         onSubmit={async (event) => {
           event.preventDefault();
@@ -457,7 +487,7 @@ function ExamEditor({ exam, done }: { exam: Exam; done: () => void }) {
               }
             >
               <option value="signal">Chỉ tín hiệu chất lượng</option>
-              <option value="strict">Đúng {gateCount(e)}/{gateCount(e)} để đi tiếp</option>
+              <option value="strict">Kiểm tra {gateCount(e)} câu đầu; cho qua từ lần sai thứ 4</option>
             </select>
           </Field>
           <label className="demo-checkbox">
@@ -468,7 +498,7 @@ function ExamEditor({ exam, done }: { exam: Exam; done: () => void }) {
                 setE({ ...e, adaptive: event.target.checked })
               }
             />
-            Cho phép chọn câu thích ứng theo lịch sử demo
+            Cho phép chọn câu thích ứng theo lịch sử minh họa
           </label>
           <div className="demo-form-grid">
             <Field label="Vùng mục tiêu">
@@ -476,6 +506,7 @@ function ExamEditor({ exam, done }: { exam: Exam; done: () => void }) {
                 value={e.region}
                 onChange={(event) => setE({ ...e, region: event.target.value })}
               >
+                {e.region && !state.regions.includes(e.region) && <option value={e.region}>{e.region}</option>}
                 {state.regions.map((v) => (
                   <option key={v}>{v}</option>
                 ))}
@@ -495,7 +526,7 @@ function ExamEditor({ exam, done }: { exam: Exam; done: () => void }) {
           {examKinds(e).map((kind, i) => (
             <Field
               key={i}
-              label={`Q${String(i + 1).padStart(2, "0")} · ${kind}`}
+              label={`Câu ${i + 1} · ${displayLabel(kind)}`}
             >
               <select
                 value={e.questionIds[i] ?? ""}
@@ -513,7 +544,7 @@ function ExamEditor({ exam, done }: { exam: Exam; done: () => void }) {
                   .filter((q) => q.kind === kind)
                   .map((q) => (
                     <option key={q.id} value={q.id}>
-                      {q.prompt} · v{q.version}
+                      {q.prompt} · phiên bản {q.version}
                     </option>
                   ))}
               </select>
@@ -551,27 +582,32 @@ function SessionAdminInner() {
   const [repeatFilter, setRepeatFilter] = useState("");
   const [query, setQuery] = useState("");
   const selected = state.sessions.find((s) => s.id === id);
+  const [page, setPage] = useState(1);
+  const filtered = state.sessions.filter(s => (!filter || s.state === filter) && (!repeatFilter || isRepeatSession(state, s) === (repeatFilter === "repeat")) && `${s.id} ${s.region} ${s.exam.title}`.toLowerCase().includes(query.toLowerCase()));
+  const pages = Math.max(1, Math.ceil(filtered.length / 10));
+  const currentPage = Math.min(page, pages);
+  if (id && !selected) return <><Heading title="Không tìm thấy lượt chơi" /><Link className="btn btn-outline-primary" to="/demo/reviewer/sessions">Về danh sách lượt</Link></>;
   return (
     <>
       <Heading title="Lượt chơi & từng câu trả lời">
-        <p>Đối chiếu mã lượt, version đề, lần thử và nội dung RAW.</p>
+        <p>Đối chiếu mã lượt, phiên bản đề, lần thử và nội dung Bản gốc.</p>
       </Heading>
       {selected ? (
-        <Panel title={`${selected.exam.title} · ${selected.id}`}>
+        <Panel title={`${selected.exam.title.replace(/Dataset1/g, "Bộ dữ liệu số 1")} · ${selected.id}`}>
           <Status value={selected.state} />
           {isTestSession(selected) && <p>Phiên kiểm tra giao diện · không tính là lượt người tham gia</p>}
           <p>{isRepeatSession(state, selected) ? "Lượt lặp" : "Lượt đầu"}</p>
-          {state.contributions.filter((c) => c.sessionId === selected.id && c.duplicateOf).map((c) => <p key={c.id}>Mẫu {c.id} trùng {c.duplicateOf} · giữ RAW riêng, không vào hàng chờ mới.</p>)}
+          {state.contributions.filter((c) => c.sessionId === selected.id && c.duplicateOf).map((c) => <p key={c.id}>Mẫu {c.id} trùng {c.duplicateOf} · giữ Bản gốc riêng, không vào hàng chờ mới.</p>)}
           <p>
-            Người tham gia: {selected.owner} · Bắt đầu: {selected.createdAt} ·
-            Gửi: {selected.submittedAt ?? "Chưa gửi"}
+            Người chơi: {state.people.find(p => p.id === selected.owner)?.name ?? "Người góp"} · Bắt đầu: {new Date(selected.createdAt).toLocaleString("vi-VN")} ·
+            Gửi: {selected.submittedAt ? new Date(selected.submittedAt).toLocaleString("vi-VN") : "Chưa gửi"}
           </p>
           <p>
             Hiện sống: {selected.region} · Lớn lên: {selected.upbringing} · Dùng
             phương ngữ: {selected.usage}
           </p>
           <AnswerTable session={selected} showQuality />
-          <Link to="/demo/admin/sessions">Về danh sách lượt</Link>
+          <Link to="/demo/reviewer/sessions">Về danh sách lượt</Link>
         </Panel>
       ) : (
         <Panel>
@@ -579,7 +615,7 @@ function SessionAdminInner() {
             <Field label="Trạng thái">
               <select
                 value={filter}
-                onChange={(e) => setFilter(e.target.value)}
+                onChange={(e) => { setFilter(e.target.value); setPage(1); }}
               >
                 <option value="">Tất cả</option>
                 <option value="playing">Đang làm</option>
@@ -588,29 +624,21 @@ function SessionAdminInner() {
               </select>
             </Field>
             <Field label="Tìm mã/vùng/bộ đề">
-              <input value={query} onChange={(e) => setQuery(e.target.value)} />
+              <input value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} />
             </Field>
             <Field label="Loại lượt">
-              <select value={repeatFilter} onChange={(e) => setRepeatFilter(e.target.value)}><option value="">Tất cả lượt</option><option value="first">Lượt đầu</option><option value="repeat">Lượt lặp</option></select>
+              <select value={repeatFilter} onChange={(e) => { setRepeatFilter(e.target.value); setPage(1); }}><option value="">Tất cả lượt</option><option value="first">Lượt đầu</option><option value="repeat">Lượt lặp</option></select>
             </Field>
           </div>
-          {state.sessions
-            .filter(
-              (s) =>
-                (!filter || s.state === filter) &&
-                (!repeatFilter || isRepeatSession(state, s) === (repeatFilter === "repeat")) &&
-                `${s.id} ${s.region} ${s.exam.title}`
-                  .toLowerCase()
-                  .includes(query.toLowerCase()),
-            )
+          {filtered.slice((currentPage - 1) * 10, currentPage * 10)
             .map((s) => (
               <Link
                 className="demo-row-link"
                 key={s.id}
-                to={`/demo/admin/sessions/${s.id}`}
+                to={`/demo/reviewer/sessions/${s.id}`}
               >
                 <div>
-                  <strong>{s.exam.title}</strong>
+                  <strong>{s.exam.title.replace(/Dataset1/g, "Bộ dữ liệu số 1")}</strong>
                   {isTestSession(s) && <small>Phiên kiểm tra giao diện</small>}
                   <small>{isRepeatSession(state, s) ? "Lượt lặp" : "Lượt đầu"}</small>
                   <small>
@@ -620,9 +648,10 @@ function SessionAdminInner() {
                 <Status value={s.state} />
               </Link>
             ))}
-          {!state.sessions.length && (
-            <p>Chưa có lượt. Mở Chơi game 10 câu để tạo một phiên ẩn danh.</p>
+          {!filtered.length && (
+            <p>{state.sessions.length ? "Không có lượt phù hợp." : "Chưa có lượt chơi."}</p>
           )}
+          <ListPagination page={currentPage} pages={pages} onChange={setPage} label="lượt chơi" />
         </Panel>
       )}
     </>

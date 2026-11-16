@@ -7,7 +7,7 @@ import { TASK_TYPE_LABELS, type TaskType } from "../../lib/projectTypes";
 import { UploadModal } from "./UploadModal";
 import { UploadLabelsModal } from "../projects/UploadLabelsModal";
 import { AnnotatorsPanel } from "./AnnotatorsPanel";
-import { useConfirm } from "../../components/ConfirmProvider";
+import { useConfirm } from "../../components/useConfirm";
 
 interface AudiosTabProps {
   projectId: number;
@@ -25,7 +25,7 @@ const TASK_VIEW: Record<TaskType, {
 }> = {
   audio_label: {
     short: "Transcript",
-    contentLabel: "Prelabel / Transcript gợi ý",
+    contentLabel: "Nhãn gợi ý / Bản chép lời gợi ý",
     fileIcon: "bi-music-note-beamed",
     fileTone: "audio",
     contentOf: (it) => (it.payload?.prelabel as string) ?? "",
@@ -58,7 +58,7 @@ const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
 export function AudiosTab({ projectId, enabledTaskTypes, isAdmin }: AudiosTabProps) {
   const confirm = useConfirm();
   const [items, setItems] = useState<AudioItem[] | null>(null);
-  const [activeType, setActiveType] = useState<TaskType>(enabledTaskTypes[0] ?? "audio_label");
+  const [selectedType, setActiveType] = useState<TaskType>(enabledTaskTypes[0] ?? "audio_label");
   const [error, setError] = useState<string | null>(null);
   const [showUpload, setShowUpload] = useState(false);
   const [showLabels, setShowLabels] = useState(false);
@@ -67,11 +67,7 @@ export function AudiosTab({ projectId, enabledTaskTypes, isAdmin }: AudiosTabPro
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Khi enabledTaskTypes đổi mà activeType không còn hợp lệ → reset
-  useEffect(() => {
-    if (!enabledTaskTypes.includes(activeType) && enabledTaskTypes.length > 0) {
-      setActiveType(enabledTaskTypes[0]);
-    }
-  }, [enabledTaskTypes, activeType]);
+  const activeType = enabledTaskTypes.includes(selectedType) ? selectedType : (enabledTaskTypes[0] ?? "audio_label");
 
   const reload = useCallback(() => {
     audiosApi.list(projectId, { limit: 200 })
@@ -131,7 +127,7 @@ export function AudiosTab({ projectId, enabledTaskTypes, isAdmin }: AudiosTabPro
       }
       setPlayingId(id);
     } catch (e) {
-      setError(extractError(e, "Không phát được audio"));
+      setError(extractError(e, "Không phát được âm thanh"));
     }
   };
 
@@ -260,10 +256,10 @@ function DatasetGroup({ taskType, items, isAdmin, playingId, activeAudioId, onPl
             type="button"
             className="ds-group-upload-labels"
             onClick={onUploadLabels}
-            title="Upload CSV/JSONL prelabel"
+            title="Tải lên CSV/JSONL nhãn gợi ý"
           >
             <i className="bi bi-filetype-csv"></i>
-            <span>Upload prelabel</span>
+            <span>Tải lên nhãn gợi ý</span>
           </button>
         )}
         {onAdd && (
@@ -294,9 +290,9 @@ function DatasetGroup({ taskType, items, isAdmin, playingId, activeAudioId, onPl
               ) : (
                 <tr>
                   <th style={{ width: 56 }} className="text-center">Âm thanh</th>
-                  <th style={{ width: "32%" }}>Tên file</th>
+                  <th style={{ width: "32%" }}>Tên tệp</th>
                   <th>{view.contentLabel}</th>
-                  <th style={{ width: 90 }}>Size</th>
+                  <th style={{ width: 90 }}>Kích thước</th>
                   <th style={{ width: 130 }}>Đã gán</th>
                   <th style={{ width: 110 }}>Trạng thái</th>
                   <th style={{ width: 60 }}></th>

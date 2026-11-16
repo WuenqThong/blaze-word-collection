@@ -19,9 +19,14 @@ export function WithdrawModal({ show, onHide, onSuccess }: WithdrawModalProps) {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const [previousInputs, setPreviousInputs] = useState([show]);
+  if (previousInputs[0] !== show) {
+    setPreviousInputs([show]);
+    setError(null);
+  }
+
   useEffect(() => {
     if (!show) return;
-    setError(null);
     Promise.all([walletApi.getWallet(), walletApi.getProfile()])
       .then(([w, p]) => {
         setWallet(w);
@@ -88,7 +93,7 @@ export function WithdrawModal({ show, onHide, onSuccess }: WithdrawModalProps) {
               <strong>Chưa đủ ngưỡng rút.</strong>
               <div className="small">
                 Cần tối thiểu <strong>{wallet.min_withdrawal_points}</strong> điểm khả dụng để tạo yêu cầu rút.
-                Bạn đang có <strong>{wallet.available_points}</strong> điểm — hãy gán thêm và đợi admin duyệt nhé.
+                Bạn đang có <strong>{wallet.available_points}</strong> điểm — hãy gán thêm và đợi quản trị viên duyệt nhé.
               </div>
             </div>
           </Alert>

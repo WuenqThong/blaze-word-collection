@@ -22,15 +22,17 @@ export function RelabelModal({ show, annotationId, onHide, onSaved }: RelabelMod
   const [option, setOption] = useState<string | null>(null);
 
   const playerRef = useRef<AudioPlayerHandle>(null);
-  const startRef = useRef<number>(Date.now());
+  const startRef = useRef<number>(0);
 
-  useEffect(() => {
-    if (!show || !annotationId) {
-      setCtx(null); setError(null);
-      return;
-    }
+  const [previousInputs, setPreviousInputs] = useState([show, annotationId]);
+  if (previousInputs[0] !== show || previousInputs[1] !== annotationId) {
+    setPreviousInputs([show, annotationId]);
     setCtx(null);
     setError(null);
+  }
+
+  useEffect(() => {
+    if (!show || !annotationId) return;
     reviewApi.relabelContext(annotationId)
       .then((c) => {
         setCtx(c);
@@ -89,7 +91,7 @@ export function RelabelModal({ show, annotationId, onHide, onSaved }: RelabelMod
   return (
     <Modal show={show} onHide={onHide} size="lg" centered backdrop={saving ? "static" : true}>
       <Modal.Header closeButton>
-        <Modal.Title>Sửa lại annotation</Modal.Title>
+        <Modal.Title>Sửa lại bài gán nhãn</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         {error && <Alert variant="danger" className="py-2">{error}</Alert>}
@@ -107,7 +109,7 @@ export function RelabelModal({ show, annotationId, onHide, onSaved }: RelabelMod
                   className="task-textarea"
                   value={text}
                   onChange={(e) => setText(e.target.value)}
-                  placeholder="Nhập transcript audio..."
+                  placeholder="Nhập bản chép lời âm thanh..."
                   autoFocus
                 />
               )}

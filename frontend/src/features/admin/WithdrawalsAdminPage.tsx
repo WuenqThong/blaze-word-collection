@@ -52,11 +52,11 @@ export function WithdrawalsAdminPage() {
       <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
         <div>
           <Link to="/dashboard" className="small text-muted">
-            <i className="bi bi-arrow-left me-1"></i>Dashboard
+            <i className="bi bi-arrow-left me-1"></i>Tổng quan
           </Link>
           <h3 className="mt-1 mb-1">Yêu cầu rút tiền</h3>
           <p className="text-muted mb-0 mt-1">
-            Duyệt → Chuyển khoản → Đánh dấu đã thanh toán. Khi paid, điểm bị trừ khỏi balance khả dụng của user.
+            Duyệt → Chuyển khoản → Đánh dấu đã thanh toán. Khi paid, điểm bị trừ khỏi balance khả dụng của người dùng.
           </p>
         </div>
         <Form.Select size="sm" style={{ width: 220 }}
@@ -99,8 +99,8 @@ export function WithdrawalsAdminPage() {
                   <div className="ledger-meta mt-1">
                     <i className="bi bi-bank2 me-1"></i>{w.bank_name} · {w.bank_account_number} · {w.bank_account_holder}
                   </div>
-                  {w.note && <div className="ledger-note">User: {w.note}</div>}
-                  {w.admin_note && <div className="ledger-note">Admin: {w.admin_note}</div>}
+                  {w.note && <div className="ledger-note">Người dùng: {w.note}</div>}
+                  {w.admin_note && <div className="ledger-note">Quản trị viên: {w.admin_note}</div>}
                 </div>
                 <div className="d-flex flex-column align-items-end gap-2" style={{ minWidth: 220 }}>
                   <span className={`status-pill ${meta.cls}`}>{meta.text}</span>

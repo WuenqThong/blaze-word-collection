@@ -16,17 +16,15 @@ export function WalletButton() {
   const [error, setError] = useState(false);
 
   const load = () => {
-    setError(false);
     Promise.all([walletApi.getWallet(), walletApi.listMine()]).then(([summary, history]) => {
-      setWallet(summary); setItems(history.items);
+      setError(false); setWallet(summary); setItems(history.items);
     }).catch(() => setError(true));
   };
 
   useEffect(() => { load(); }, []);
-  useEffect(() => { if (open) load(); }, [open]);
 
   return (
-    <Dropdown align="end" show={open} onToggle={(v) => setOpen(v)}>
+    <Dropdown align="end" show={open} onToggle={(v) => { setOpen(v); if (v) { setError(false); load(); } }}>
       <Dropdown.Toggle as="button" className="wallet-toggle" id="wallet-menu">
         <span className="wallet-seg wallet-seg-confirmed" title="Điểm đã chính thức">
           <span className="wallet-seg-label">Điểm:</span>
@@ -40,7 +38,7 @@ export function WalletButton() {
       </Dropdown.Toggle>
 
       <Dropdown.Menu className="wallet-menu">
-        {error ? <div className="p-3" role="alert"><p>Không tải được dữ liệu ví. Số dư chưa được cập nhật.</p><button className="btn btn-outline-primary" onClick={load}>Thử lại</button></div> : <>
+        {error ? <div className="p-3" role="alert"><p>Không tải được dữ liệu ví. Số dư chưa được cập nhật.</p><button className="btn btn-outline-primary" onClick={() => { setError(false); load(); }}>Thử lại</button></div> : <>
         <div className="wallet-menu-head">
           <div className="wallet-menu-label">Số dư khả dụng</div>
           {wallet ? (

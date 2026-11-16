@@ -1,3 +1,4 @@
+import { fixedOriginal } from "./dialectOriginal";
 import type { DemoState, Question, QuestionKind } from "./types";
 
 const url = "https://docs.google.com/spreadsheets/d/1s9ydC5lWltZ-lZYigUHbceVj7SgyZamlDw6seZbAaWk/edit";
@@ -47,6 +48,7 @@ export function addDatasetQuestions(s: DemoState): boolean {
       return {
         id, version: 1, kind: kinds[i], format: formats[i],
         prompt: row?.[3] ?? (i === 8 ? `Góp một từ/cụm từ bạn thực dùng liên quan chủ đề ‘${pack.title}’, kèm nghĩa, cách nói phổ thông và ngữ cảnh.` : `Góp một câu bạn thực dùng liên quan chủ đề ‘${pack.title}’, kèm nghĩa, bản phổ thông và ngữ cảnh.`),
+        originalText: row ? fixedOriginal({ kind: kinds[i], prompt: row[3] } as Question) : undefined,
         accepted: row?.[4] ?? [], options: row?.[5] ? [row[4][0], ...row[5]].map((text, n) => ({ id: `${id}-o${n + 1}`, text })) : undefined,
         correctOptionId: row?.[5] ? `${id}-o1` : undefined, blankTemplate: row?.[6],
         region: "Quảng Nam – Đà Nẵng", topic: pack.slug === "kitchen" ? "Ẩm thực" : "Sinh hoạt", sourceId: "dataset1-source",

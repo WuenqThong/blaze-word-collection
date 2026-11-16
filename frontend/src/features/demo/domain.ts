@@ -10,6 +10,8 @@ import type {
 import { blankRaw, examKinds, gateCount } from "./seed";
 import { questionErrors, shuffleOptions } from "./questionFormats";
 import { isTestSession } from "./testSessions";
+import { localQualityReasons } from "./contributionQuality";
+import { answerOriginal, isOpenQuestion } from "./dialectOriginal";
 import { REGION_CHOICES } from "./regions";
 export const uid = () => crypto.randomUUID();
 const hash = (s: string) => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return h >>> 0; };
@@ -49,7 +51,7 @@ export function examErrors(s: DemoState, e: Exam, real = false) {
       q &&
       q.format !== "choice" &&
       ["GATE", "GOLD"].includes(q.kind) &&
-      !q.accepted.some((a) => a.trim())
+      !q.serverRevision && !q.accepted.some((a) => a.trim())
     )
       errors.push(`Q${i + 1} cần đáp án/biến thể.`);
     if (q && (!q.prompt.trim() || q.approval === "DRAFT"))
@@ -76,9 +78,15 @@ export function canAdvance(session: Session, index: number) {
       .slice(0, gateCount(session.exam))
       .every(
         (a) =>
-          !a.skipped && isAnswered(a) && a.attempts.at(-1)?.correct === true,
+          !a.skipped && isAnswered(a) && (a.attempts.at(-1)?.correct === true || isGateProposal(a)),
       )
   );
+}
+export function wrongAttempts(answer: Answer) {
+  return answer.attempts.filter(attempt => attempt.correct === false).length;
+}
+export function isGateProposal(answer: Answer) {
+  return !answer.skipped && isAnswered(answer) && answer.attempts.at(-1)?.correct === false && wrongAttempts(answer) > 3;
 }
 export function isAnswered(a: Answer) {
   const last = a.attempts.at(-1);
@@ -151,7 +159,7 @@ export function exclusionReasons(s: DemoState, c: Contribution) {
     (!c.consent.audio ||
       !s.sources.find((x) => x.id === c.sourceId)?.audio ||
       c.qaAudio !== "pass")
-      ? "Audio chưa đủ quyền/QA"
+      ? "Âm thanh chưa đủ quyền/Kiểm tra chất lượng"
       : null,
     c.withdrawn ? "Đã rút" : null,
     !c.consent.collect || !c.consent.train ? "Thiếu đồng ý sử dụng" : null,
@@ -209,11 +217,11 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
     if (!ok) throw Error(message);
   };
   const admin = () =>
-    assert(actor.role === "admin", "Cần vai trò quản trị trong demo.");
+    assert(["admin", "reviewer"].includes(actor.role), "Cần vai trò quản trị trong minh họa.");
   const review = () =>
     assert(
       ["admin", "reviewer"].includes(actor.role),
-      "Cần vai trò reviewer/admin.",
+      "Cần vai trò người duyệt/quản trị viên.",
     );
   const contribution = (id: string) => {
     const c = s.contributions.find((c) => c.id === id);
@@ -224,7 +232,7 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
     const x = s.sessions.find((x) => x.id === id);
     assert(x, "Không tìm thấy lượt chơi.");
     assert(
-      x!.owner === actor.id || actor.role === "admin",
+      x!.owner === actor.id || ["admin", "reviewer"].includes(actor.role),
       "Lượt chơi không thuộc vai trò hiện tại.",
     );
     return x!;
@@ -258,7 +266,7 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
       s.actor = command.id;
       break;
     case "register": {
-      assert(command.name.trim(), "Cần tên hiển thị demo.");
+      assert(command.name.trim(), "Cần tên hiển thị minh họa.");
       const id = uid();
       s.people.push({
         id,
@@ -270,7 +278,7 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
         appeal: "",
       });
       s.actor = id;
-      audit("REGISTER", id, "Tài khoản demo, không được tặng credit.");
+      audit("REGISTER", id, "Tài khoản minh họa, không được tặng lượt sử dụng.");
       break;
     }
     case "appeal":
@@ -289,7 +297,7 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
       admin();
       assert(
         !s.models.some((m) => m.id === command.model.id),
-        "Phiên bản model đã có; tạo ID mới.",
+        "Phiên bản mô hình đã có; tạo ID mới.",
       );
       s.models.push(command.model);
       audit("MODEL_VERSION", command.model.id, command.model.notes);
@@ -395,20 +403,21 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
         submittedAt: null,
         campaignId: command.campaignId,
       });
-      audit("START_GAME", command.id, "Phiên demo, snapshot đề đã lưu.");
+      audit("START_GAME", command.id, "Phiên minh họa, bản lưu tại thời điểm tạo đề đã lưu.");
       break;
     }
     case "answer": {
       const x = session(command.id);
-      assert(x.state === "playing", "Lượt đã gửi/rút; không sửa RAW.");
+      assert(x.state === "playing", "Lượt đã gửi/rút; không sửa Bản gốc.");
       assert(command.index >= 0 && command.index < 10, "Vị trí không hợp lệ.");
-      assert(canAdvance(x, command.index), `Cần trả lời đúng ${gateCount(x.exam)}/${gateCount(x.exam)} câu đầu trước khi tiếp tục.`);
+      assert(canAdvance(x, command.index), `Cần hoàn tất ${gateCount(x.exam)} câu đầu: trả lời đúng hoặc gửi đề xuất từ lần sai thứ 4.`);
       const a = structuredClone(command.answer);
       assert(a.skipped || a.text.trim(), "Nhập đáp án hoặc chọn bỏ qua.");
       assert(
         a.skipped ||
-          command.index < 8 ||
-          [a.meaning, a.standard, a.context].every((v) => v.trim()),
+          !isOpenQuestion(x.questions[command.index]) ||
+          !!a.originalText?.trim() &&
+          !!a.standard.trim() && !!(a.meaning.trim() || a.context.trim()),
         "Câu đóng góp mới cần nghĩa, bản phổ thông và ngữ cảnh.",
       );
       const q = x.questions[command.index];
@@ -434,6 +443,10 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
         },
       ];
       a.updatedAt = now;
+      if (q.kind === "GATE" && isGateProposal(a)) {
+        a.suggestion = a.suggestion.trim() || a.text.trim();
+        a.attempts.at(-1)!.proposal = a.suggestion;
+      }
       x.answers[command.index] = a;
       assert(
         command.next >= 0 && command.next <= 12,
@@ -490,8 +503,9 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
           (a, i) =>
             isAnswered(a) &&
             (a.skipped ||
-              i < 8 ||
-              [a.meaning, a.standard, a.context].every((v) => v.trim())),
+              !isOpenQuestion(x.questions[i]) ||
+              !!a.originalText?.trim() &&
+              !!a.standard.trim() && !!(a.meaning.trim() || a.context.trim())),
         ),
         "Cần trả lời hoặc đánh dấu bỏ qua đủ 10 câu.",
       );
@@ -499,6 +513,13 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
         command.region.trim() && command.upbringing.trim(),
         "Chọn nơi đang sống và nơi lớn lên, hoặc “Không chắc / nhiều nơi”.",
       );
+      x.answers.forEach((a, i) => {
+        const q = x.questions[i];
+        const proposal = q.kind === "GATE" && (a.attempts.some(t => t.proposal) || isGateProposal(a));
+        if ((!a.skipped || proposal) && (!["GATE", "GOLD"].includes(q.kind) || proposal)) {
+          assert(answerOriginal(q, a), `Câu ${i + 1}: thiếu cách nói địa phương gốc rõ ràng. Giữ bản nháp và nhờ người quản lý bổ sung originalText trước khi bắt đầu lượt mới.`);
+        }
+      });
       x.region = command.region;
       x.upbringing = command.upbringing;
       x.usage = command.usage;
@@ -506,22 +527,28 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
       x.submittedAt = now;
       x.cursor = 12;
       x.answers.forEach((a, i) => {
-        if (a.skipped || ["GATE", "GOLD"].includes(x.questions[i].kind)) return;
+        const proposal = x.questions[i].kind === "GATE" ? [...a.attempts].reverse().find(t => t.proposal)?.proposal || (isGateProposal(a) ? a.suggestion.trim() || a.text.trim() : "") : "";
+        if ((a.skipped && !proposal) || (["GATE", "GOLD"].includes(x.questions[i].kind) && !proposal)) return;
         const r = {
           ...blankRaw(),
           kind: ["SENTENCE", "OPEN_SENTENCE"].includes(x.questions[i].kind) ? ("sentence" as const) : ("word" as const),
-          text: a.text,
-          meaning: a.meaning,
-          standard: a.standard,
-          context: a.context,
+          text: answerOriginal(x.questions[i], a),
+          meaning: proposal ? "" : a.meaning,
+          standard: proposal || a.standard || a.text,
+          context: proposal ? x.questions[i].prompt : a.context,
           region: x.region,
           topic: x.questions[i].topic,
           evidence: `Đề ${x.exam.title} v${x.exam.version} / Q${i + 1}${x.questions[i].provenance?.rowId ? ` · Dataset1 ${x.questions[i].provenance!.rowId} (${x.questions[i].provenance!.verification === "unverified" ? "chưa kiểm chứng" : "có nguồn"})` : ""}`,
           method: "game",
+          questionKind: x.questions[i].kind,
+          questionFormat: x.questions[i].format,
           family: `${x.exam.id}:q${i + 1}`,
         };
+        if (proposal) r.evidence = `Đề xuất đáp án mới sau hơn 3 lần sai; chưa được xác nhận. · ${r.evidence}`;
         const duplicate = s.contributions.find((c) => !c.withdrawn && !c.duplicateOf && c.raw.kind === r.kind && (["text", "meaning", "standard", "context", "region"] as const).every((key) => normalize(c.raw[key]) === normalize(r[key])));
+        const qualityReasons = localQualityReasons(r, x.questions[i]);
         s.contributions.push({
+          ...{ qualityReasons },
           duplicateOf: duplicate?.id,
           id: `${x.id}:q${i + 1}`,
           owner: x.owner,
@@ -530,7 +557,7 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
           raw: r,
           consent: structuredClone(x.consent),
           sourceId: x.questions[i].sourceId,
-          status: duplicate ? "HOLD" : "RAW",
+          status: proposal || duplicate || qualityReasons.length ? "HOLD" : "RAW",
           createdAt: now,
           withdrawn: false,
           curated: null,
@@ -541,7 +568,7 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
       audit(
         "SUBMIT_GAME",
         x.id,
-        "Đã lưu 10 câu và RAW mở. Không tự cấp credit.",
+        "Đã lưu 10 câu và Bản gốc mở. Không tự cấp lượt sử dụng.",
       );
       break;
     }
@@ -559,7 +586,7 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
     case "claim": {
       assert(
         actor.role !== "guest",
-        "Chuyển sang tài khoản demo trước khi nhận lượt.",
+        "Chuyển sang tài khoản minh họa trước khi nhận lượt.",
       );
       const x = s.sessions.find(
         (x) => x.id === command.id && x.recovery === command.code,
@@ -572,13 +599,13 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
         .forEach((c) => {
           c.owner = actor.id;
         });
-      audit("CLAIM", x!.id, "Gắn tài khoản demo.");
+      audit("CLAIM", x!.id, "Gắn tài khoản minh họa.");
       break;
     }
     case "contribute": {
       if (s.contributions.some((c) => c.id === command.id)) break;
       assert(command.consent.collect, "Cần đồng ý tiếp nhận.");
-      assert(command.consent.train || (actor.role === "admin" && command.raw.method === "import"), "Cần đồng ý sử dụng dữ liệu để huấn luyện.");
+      assert(command.consent.train || (["admin", "reviewer"].includes(actor.role) && command.raw.method === "import"), "Cần đồng ý sử dụng dữ liệu để huấn luyện.");
       assert(
         command.raw.response !== "answer" ||
           [
@@ -610,7 +637,9 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
           demo: true,
         });
       }
+      const qualityReasons = localQualityReasons(command.raw);
       s.contributions.push({
+        ...{ qualityReasons },
         id: command.id,
         owner: actor.id,
         sessionId: null,
@@ -618,22 +647,28 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
         raw: command.raw,
         consent: command.consent,
         sourceId,
-        status: "RAW",
+        status: qualityReasons.length ? "HOLD" : "RAW",
         createdAt: now,
         withdrawn: false,
         curated: null,
         senseId: null,
         qaAudio: "",
       });
-      audit("CONTRIBUTE", command.id, "RAW giữ nguyên.");
+      audit("CONTRIBUTE", command.id, "Bản gốc giữ nguyên.");
       break;
     }
     case "consent": {
       const c = contribution(command.id);
       assert(
-        c.owner === actor.id || actor.role === "admin",
+        c.owner === actor.id || ["admin", "reviewer"].includes(actor.role),
         "Không có quyền quản lý mẫu.",
       );
+      assert(!c.withdrawn || command.withdraw, "Mẫu đã rút không thể khôi phục; hãy gửi bản mới.");
+      if (c.owner !== actor.id) {
+        assert(command.consent.version === c.consent.version &&
+          (["collect", "train", "public", "audio"] as const).every(k => !command.consent[k] || c.consent[k]),
+          "Chỉ người góp được mở rộng quyền sử dụng mẫu.");
+      }
       c.consent = command.consent;
       c.withdrawn = command.withdraw;
       audit(
@@ -647,11 +682,12 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
     case "vote": {
       review();
       const c = contribution(command.id);
+      assert(s.votes.filter(v => v.contributionId === c.id).length < 2, "Đã đủ hai phiếu; cần phân xử nếu bất đồng.");
       assert(!c.duplicateOf, "Mẫu trùng không thuộc hàng chờ duyệt mới.");
       assert(c.owner !== actor.id, "Không tự duyệt.");
       assert(
-        actor.role === "admin" || actor.region === c.raw.region,
-        "Ngoài phạm vi vùng reviewer.",
+        ["admin", "reviewer"].includes(actor.role) || actor.region === c.raw.region,
+        "Ngoài phạm vi vùng người duyệt.",
       );
       assert(
         !c.withdrawn && ["RAW", "REVIEW"].includes(c.status),
@@ -713,7 +749,7 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
       c.curated = command.raw;
       c.senseId = command.senseId;
       c.qaAudio = command.qaAudio;
-      audit("CURATE", c.id, "Lưu bản chuẩn hóa; không sửa RAW.");
+      audit("CURATE", c.id, "Lưu bản chuẩn hóa; không sửa Bản gốc.");
       break;
     }
     case "question": {
@@ -766,7 +802,7 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
       assert(!errors.length, errors.join(" "));
       e!.status = "active";
       e!.demo = !command.real;
-      audit("PUBLISH", e!.id, command.real ? "Thu thật" : "Chỉ demo");
+      audit("PUBLISH", e!.id, command.real ? "Thu thật" : "Chỉ minh họa");
       break;
     }
     case "closeExam": {
@@ -774,7 +810,7 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
       const e = s.exams.find((e) => e.id === command.id);
       assert(e, "Không tìm thấy đề.");
       e!.status = "closed";
-      audit("CLOSE_EXAM", e!.id, "Phiên đang làm giữ snapshot.");
+      audit("CLOSE_EXAM", e!.id, "Phiên đang làm giữ bản lưu tại thời điểm tạo.");
       break;
     }
     case "source":
@@ -802,7 +838,7 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
     case "person":
       admin();
       assert(
-        command.person.id !== "admin" || command.person.role === "admin",
+        command.person.id !== "admin" || ["admin", "reviewer"].includes(command.person.role),
         "Không thu hồi quản trị mẫu.",
       );
       s.people = s.people
@@ -842,7 +878,7 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
       break;
     case "grant": {
       admin();
-      assert(s.rewardEnabled, "Chưa duyệt cơ chế hạn mức demo.");
+      assert(s.rewardEnabled, "Chưa duyệt cơ chế hạn mức minh họa.");
       const p = s.people.find((p) => p.id === command.owner);
       const c = contribution(command.contributionId);
       assert(
@@ -853,7 +889,7 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
         c.owner === p!.id &&
           eligible(s, c) &&
           !duplicates(s, c.raw, c.id).length,
-        "Mẫu chưa đủ QA/quyền hoặc trùng.",
+        "Mẫu chưa đủ Kiểm tra chất lượng/quyền hoặc trùng.",
       );
       assert(
         !s.credits.some((x) => x.contributionId === c.id),
@@ -875,7 +911,7 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
         revoked: false,
         at: now,
       });
-      audit("GRANT", p!.id, "Cấp 5 lượt AI nội bộ demo; không chuyển nhượng.");
+      audit("GRANT", p!.id, "Cấp 5 lượt AI nội bộ minh họa; không chuyển nhượng.");
       break;
     }
     case "revoke":
@@ -930,7 +966,7 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
         "Không có mẫu đủ điều kiện.",
       );
       s.releases.push(command.release);
-      audit("EXPORT", command.release.id, "Bản DEMO, không train thật.");
+      audit("EXPORT", command.release.id, "Bản Minh họa, không huấn luyện thật.");
       break;
     case "media":
       assert(command.media.rights, "Cần xác nhận quyền media.");

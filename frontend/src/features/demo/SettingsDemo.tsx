@@ -1,9 +1,13 @@
+import { ResponsiveTable } from "../../components/ResponsiveTable";
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useDemo } from "./context";
 import { uid } from "./domain";
 import { METHODS } from "./seed";
 import { Action, DemoGuard, Field, Heading, Panel } from "./ui";
-import type { Source, Task } from "./types";
+import { Modal } from "react-bootstrap";
+import { displayLabel } from "../../lib/display";
+import type { Person, Source, Task } from "./types";
 import { MediaAttach } from "./ContributionDemo";
 
 const RIGHT_LABEL = { train: "dùng để huấn luyện", public: "công khai", audio: "dùng âm thanh" } as const;
@@ -15,8 +19,28 @@ export function SettingsDemo() {
     </DemoGuard>
   );
 }
+function ParticipantRow({ person }: { person: Person }) {
+  const { run, live } = useDemo();
+  const [draft, setDraft] = useState(person);
+  const [baseline, setBaseline] = useState(person);
+  const [confirm, setConfirm] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const dirty = ["role", "region", "verified", "risk"].some(key => draft[key as keyof Person] !== person[key as keyof Person]);
+  function change(value: Partial<Person>) { setDraft({ ...draft, ...value }); setSaved(false); }
+  return <><tr><td>{person.name}<small>{live ? `Mã người dùng #${person.id.slice(8)}` : person.id}</small></td>
+    <td><select aria-label={`Vai trò ${person.name}`} value={draft.role === "admin" ? "reviewer" : draft.role} disabled={person.id === "guest"} onChange={e => change({ role: e.target.value as Person["role"] })}>{!live && <option value="guest">Khách</option>}<option value="contributor">Người góp</option><option value="reviewer">Reviewer</option></select></td>
+    <td><label className="demo-checkbox"><input type="checkbox" checked={draft.verified} onChange={e => change({ verified: e.target.checked })}/>Đã xác nhận tài khoản</label><select aria-label={`Rủi ro ${person.name}`} value={draft.risk} onChange={e => change({ risk: e.target.value as Person["risk"] })}><option value="clear">Bình thường</option><option value="hold">Tạm giữ kiểm tra</option></select>
+      <div className="demo-actions"><Action disabled={!dirty} onClick={() => setConfirm(true)}>Lưu thay đổi</Action>{dirty && <button type="button" className="btn btn-link" onClick={() => { setDraft(person); setBaseline(person); }}>Hủy sửa</button>}</div>{saved && <p role="status">Đã lưu thay đổi.</p>}
+    </td></tr>
+    <Modal aria-label="Lưu thay đổi tài khoản" centered show={confirm} onHide={() => setConfirm(false)}><Modal.Header closeLabel="Đóng" closeButton><Modal.Title>Lưu thay đổi?</Modal.Title></Modal.Header><Modal.Body><p>Tài khoản: {person.name}</p><p>Vai trò: {displayLabel(draft.role)}</p><p>Chỉ lưu sau khi bạn xác nhận. Thay đổi được ghi vào lịch sử hệ thống.</p></Modal.Body><Modal.Footer><button type="button" className="btn btn-outline-secondary" onClick={() => setConfirm(false)}>Quay lại sửa</button><Action onClick={async () => { await run({ type: "person", person: draft, expected: baseline }); setBaseline(draft); setConfirm(false); setSaved(true); }}>Xác nhận</Action></Modal.Footer></Modal>
+  </>;
+}
 function SettingsInner() {
   const { state, run, live } = useDemo();
+  const [params, setParams] = useSearchParams();
+  const [taxonomyRevision, setTaxonomyRevision] = useState(state.catalogRevisions?.["taxonomy:default"]);
+  const sections = [["people", "Người dùng"], ["sources", "Quyền nguồn"], ["catalog", "Vùng & chủ đề"], ["tasks", "Nhiệm vụ góp từ"]];
+  const section = sections.some(([key]) => key === params.get("section")) ? params.get("section")! : "people";
   const [regions, setRegions] = useState(state.regions.join("\n"));
   const [topics, setTopics] = useState(state.topics.join("\n"));
   const [source, setSource] = useState<Source>({
@@ -39,11 +63,13 @@ function SettingsInner() {
     active: true,
   });
   const [query, setQuery] = useState("");
+  const [sourceConfirm, setSourceConfirm] = useState(false);
   return (
     <>
-      <Heading title="Vùng, chủ đề, nguồn và người tham gia" />
-      <div className="demo-two-col">
-        <Panel title="Taxonomy tự khai">
+      <Heading title={section === "sources" ? "Nguồn" : "Cài đặt"} />
+      {section !== "sources" && <nav className="admin-settings-tabs" aria-label="Mục quản lý">{sections.filter(([key]) => key !== "sources" && key !== "tasks").map(([key, label]) => <button type="button" key={key} aria-pressed={section === key} onClick={() => setParams(previous => { const next = new URLSearchParams(previous); next.set("section", key); return next; })}>{label}</button>)}</nav>}
+      <div className="admin-settings-content">
+        {section === "catalog" && <Panel title="Vùng sử dụng & chủ đề">
           <Field label="Vùng / tên lịch sử (mỗi dòng một vùng)">
             <textarea
               value={regions}
@@ -59,19 +85,21 @@ function SettingsInner() {
             />
           </Field>
           <Action
-            onClick={() =>
-              run({
+            onClick={async () => {
+              const next = await run({
                 type: "taxonomy",
+                expectedRevision: taxonomyRevision,
                 regions: regions.split("\n").map((v) => v.trim()),
                 topics: topics.split("\n").map((v) => v.trim()),
-              })
-            }
+              });
+              setTaxonomyRevision(next.catalogRevisions?.["taxonomy:default"]);
+            }}
           >
             Lưu vùng và chủ đề
           </Action>
-        </Panel>
-        <Panel title="Nguồn & quyền theo mục đích">
-          <Field label="Chọn nguồn để sửa">
+        </Panel>}
+        {section === "sources" && <Panel title="Nguồn">
+          <Field label="Chọn nguồn">
             <select
               value={source.id}
               onChange={(e) => {
@@ -101,7 +129,7 @@ function SettingsInner() {
               }
             />
           </Field>
-          {(["train", "public", "audio"] as const).map((k) => (
+          {(["train", "public"] as const).map((k) => (
             <label className="demo-checkbox" key={k}>
               <input
                 type="checkbox"
@@ -110,14 +138,14 @@ function SettingsInner() {
                   setSource({ ...source, [k]: e.target.checked })
                 }
               />
-              {live ? `Có quyền ${RIGHT_LABEL[k]}` : `Đủ quyền ${k} trong DEMO`}
+              {live ? `Có quyền ${RIGHT_LABEL[k]}` : `Đủ quyền ${RIGHT_LABEL[k]} trong bản minh họa`}
             </label>
           ))}
           <Action
             disabled={!source.title.trim() || !source.evidence.trim()}
-            onClick={() => run({ type: "source", source })}
+            onClick={() => setSourceConfirm(true)}
           >
-            Lưu quyền nguồn
+            Lưu
           </Action>
           <Action
             onClick={() =>
@@ -144,114 +172,38 @@ function SettingsInner() {
                 </p>
               ))}
           </details>
-        </Panel>
+        </Panel>}
       </div>
-      <Panel title="Vai trò / vùng reviewer / xác nhận tài khoản">
+      {section === "people" && <Panel title="Người dùng">
+        <p className="demo-note">Đổi vai trò, bấm Lưu rồi xác nhận.</p>
         <Field label="Tìm người">
           <input value={query} onChange={(e) => setQuery(e.target.value)} />
         </Field>
-        <div className="demo-table-scroll">
+        <ResponsiveTable>
           <table>
             <thead>
               <tr>
                 <th>Người</th>
                 <th>Vai trò</th>
-                <th>Vùng chuyên môn</th>
-                <th>Xác nhận / rủi ro</th>
+                <th>Trạng thái</th>
               </tr>
             </thead>
             <tbody>
               {state.people
                 .filter((p) =>
-                  p.name.toLowerCase().includes(query.toLowerCase()),
+                  (!live || /^account:\d+$/.test(p.id)) && p.name.toLowerCase().includes(query.toLowerCase()),
                 )
-                .map((p) => (
-                  <tr key={p.id}>
-                    <td>
-                      {p.name}
-                      <small>{p.id}</small>
-                    </td>
-                    <td>
-                      <select
-                        aria-label={`Vai trò ${p.name}`}
-                        value={p.role}
-                        disabled={p.id === "admin" || p.id === "guest" || (live && p.role === "admin")}
-                        onChange={(e) =>
-                          void run({
-                            type: "person",
-                            person: {
-                              ...p,
-                              role: e.target.value as typeof p.role,
-                            },
-                          }).catch(() => {})
-                        }
-                      >
-                        <option value="guest" disabled={live}>Ẩn danh</option>
-                        <option value="contributor">Người góp</option>
-                        <option value="reviewer">Reviewer</option>
-                        <option value="admin" disabled={live && p.role !== "admin"}>Admin</option>
-                      </select>
-                    </td>
-                    <td>
-                      <select
-                        aria-label={`Vùng ${p.name}`}
-                        value={p.region}
-                        onChange={(e) =>
-                          void run({
-                            type: "person",
-                            person: { ...p, region: e.target.value },
-                          }).catch(() => {})
-                        }
-                      >
-                        {state.regions.map((v) => (
-                          <option key={v}>{v}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
-                      <label className="demo-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={p.verified}
-                          onChange={(e) =>
-                            void run({
-                              type: "person",
-                              person: { ...p, verified: e.target.checked },
-                            }).catch(() => {})
-                          }
-                        />
-                        {live ? "Đã xác nhận tài khoản" : "Đã xác nhận demo"}
-                      </label>
-                      <select
-                        aria-label={`Rủi ro ${p.name}`}
-                        value={p.risk}
-                        onChange={(e) =>
-                          void run({
-                            type: "person",
-                            person: {
-                              ...p,
-                              risk: e.target.value as typeof p.risk,
-                            },
-                          }).catch(() => {})
-                        }
-                      >
-                        <option value="clear">Đã rà soát / bình thường</option>
-                        <option value="hold">Tạm giữ kiểm tra</option>
-                      </select>
-                      {p.appeal && <p>Khiếu nại: {p.appeal}</p>}
-                    </td>
-                  </tr>
-                ))}
+                .map((p) => <ParticipantRow key={p.id} person={p} />)}
             </tbody>
           </table>
-        </div>
+        </ResponsiveTable>
         <p className="demo-note">
           {live
-            ? "Lưu trên máy chủ: vai trò Người góp/Reviewer, vùng chuyên môn (reviewer chỉ duyệt mẫu trong vùng này), xác nhận và rủi ro. Quyền admin chỉ cấp ở máy chủ."
-            : "Mô phỏng frontend. Không thay quyền hoặc xác minh tài khoản thật."}
+            ? "Reviewer có quyền duyệt và quản lý."
+            : "Mô phỏng giao diện. Không thay quyền hoặc xác minh tài khoản thật."}
         </p>
-      </Panel>
-      <Panel title="Tạo / cấu hình nhiệm vụ khơi từ">
+      </Panel>}
+      {section === "tasks" && <Panel title="Nhiệm vụ góp từ">
         <Field label="Nhiệm vụ đang sửa">
           <select
             value={task.id}
@@ -290,7 +242,8 @@ function SettingsInner() {
               value={task.region}
               onChange={(e) => setTask({ ...task, region: e.target.value })}
             >
-              {state.regions.map((v) => (
+              {task.region && !state.regions.includes(task.region) && <option value={task.region}>{task.region}</option>}
+                {state.regions.map((v) => (
                 <option key={v}>{v}</option>
               ))}
             </select>
@@ -306,17 +259,17 @@ function SettingsInner() {
             </select>
           </Field>
         </div>
-        <Field label="Prompt nhiệm vụ">
+        <Field label="Nội dung hướng dẫn người góp">
           <textarea
             value={task.prompt}
             onChange={(e) => setTask({ ...task, prompt: e.target.value })}
           />
         </Field>
-        <MediaAttach
+        {!live && <MediaAttach
           ids={task.mediaId ? [task.mediaId] : []}
           audioAllowed={true}
           onChange={(ids) => setTask({ ...task, mediaId: ids.at(-1) ?? null })}
-        />
+        />}
         <label className="demo-checkbox">
           <input
             type="checkbox"
@@ -328,15 +281,16 @@ function SettingsInner() {
         <div className="demo-actions">
           <Action
             disabled={!task.title.trim() || !task.prompt.trim()}
-            onClick={() => run({ type: "task", task })}
+            onClick={async () => { const next = await run({ type: "task", task }); const saved = next.tasks.find(item => item.id === task.id); if (saved) setTask(saved); }}
           >
             Lưu nhiệm vụ
           </Action>
-          <Action onClick={() => setTask({ ...task, id: uid(), title: "" })}>
+          <Action onClick={() => setTask({ ...task, id: uid(), serverRevision: undefined, title: "" })}>
             Nhiệm vụ mới
           </Action>
         </div>
-      </Panel>
+      </Panel>}
+      <Modal aria-label="Xác nhận quyền sử dụng nguồn" centered show={sourceConfirm} onHide={() => setSourceConfirm(false)}><Modal.Header closeLabel="Đóng" closeButton><Modal.Title>Xác nhận quyền sử dụng nguồn</Modal.Title></Modal.Header><Modal.Body><p>Nguồn: {source.title}</p><p>Huấn luyện: {source.train ? "Có quyền" : "Chưa xác nhận"} · Công khai: {source.public ? "Có quyền" : "Chưa xác nhận"}</p><p>Việc thu hẹp quyền sẽ ảnh hưởng đến các mẫu và bản xuất liên quan.</p></Modal.Body><Modal.Footer><button type="button" className="btn btn-outline-secondary" onClick={() => setSourceConfirm(false)}>Quay lại kiểm tra</button><Action onClick={async () => { const next = await run({ type: "source", source }); const saved = next.sources.find(item => item.id === source.id); if (saved) setSource(saved); setSourceConfirm(false); }}>Xác nhận lưu quyền nguồn</Action></Modal.Footer></Modal>
     </>
   );
 }

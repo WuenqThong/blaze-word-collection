@@ -1,4 +1,7 @@
 /* Sign in / sign up — modelled on app.blaze.vn/signin and /signup (without social login). */
+.bz-auth-recovery { margin-top: 18px; color: #786d5e; font-size: 12px; line-height: 1.65; }
+.bz-auth-recovery summary { color: #a15c00; cursor: pointer; }
+.bz-auth-recovery p { margin: 8px 0 0; }
 .bz-auth {
   --bz-auth-ink: #262626;
   --bz-auth-muted: #6b6560;
@@ -116,7 +119,7 @@
   border: 0;
   border-radius: 10px;
   background: var(--bz-auth-amber);
-  color: #fff;
+  color: #302a23;
   font-size: 16px;
   font-weight: 500;
   transition: background-color 150ms ease;
@@ -139,3 +142,13 @@
   .bz-auth-main { padding-top: 24px; }
   .bz-auth-title { font-size: 24px; }
 }
+
+.bz-auth { --bz-auth-line: #918373; }
+.bz-auth-password button { width: 44px; height: 44px; flex: 0 0 44px; color: #665d51; }
+.bz-auth-password:has(input[aria-invalid=true]) { border-color: #a12418; }
+.bz-auth-input:focus, .bz-auth-password:focus-within { outline: 3px solid #804900; outline-offset: 3px; box-shadow: none; border-color: #804900; }
+.bz-auth-input:disabled, .bz-auth-password:has(input:disabled) { background: #f0ece5; color: #665d51; }
+.bz-auth :is(.bz-auth-recovery, .bz-auth-footnote, .bz-auth-lang) { font-size: 14px; color: #665d51; }
+.bz-auth-recovery summary { display: flex; align-items: center; min-height: 44px; }
+.bz-auth-switch a { display: inline-flex; align-items: center; min-height: 44px; }
+.bz-auth-submit:disabled { opacity: 1; background: #e8dfd0; color: #665d51; }

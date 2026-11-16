@@ -155,3 +155,13 @@ class DialectGameAllocation(Base):
     campaign_id = Column(String(128), default="", nullable=False)
     withdrawn_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=utcnow, nullable=False)
+
+
+class DialectGameReceipt(Base):
+    """Explicit client acknowledgements, separate from allocation and sample count."""
+    __tablename__ = 'dialect_game_receipts'
+    session_ref = Column(String(128), ForeignKey('dialect_game_allocations.session_ref'), primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    started_at = Column(DateTime, nullable=False)
+    submitted_at = Column(DateTime, nullable=True)
+    withdrawn_at = Column(DateTime, nullable=True)

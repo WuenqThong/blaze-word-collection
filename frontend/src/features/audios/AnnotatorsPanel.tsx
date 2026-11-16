@@ -42,18 +42,21 @@ export function AnnotatorsPanel({ projectId, audio, onClose }: AnnotatorsPanelPr
   const [items, setItems] = useState<AudioAnnotatorItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [audioLoading, setAudioLoading] = useState(false);
+  const [audioLoading, setAudioLoading] = useState(() => !!audio && audio.task_type !== "qa" && (audio.mime ?? "").startsWith("audio/"));
 
   const hasAudio = !!audio && audio.task_type !== "qa" && (audio.mime ?? "").startsWith("audio/");
 
-  useEffect(() => {
-    if (!audio) {
-      setItems(null);
-      setError(null);
-      return;
-    }
+  const [previousInputs, setPreviousInputs] = useState([audio, projectId]);
+  if (previousInputs[0] !== audio || previousInputs[1] !== projectId) {
+    setPreviousInputs([audio, projectId]);
     setItems(null);
     setError(null);
+    setAudioUrl(null);
+    setAudioLoading(hasAudio);
+  }
+
+  useEffect(() => {
+    if (!audio) return;
     audiosApi
       .annotators(projectId, audio.id)
       .then((r) => setItems(r.items))
@@ -61,9 +64,7 @@ export function AnnotatorsPanel({ projectId, audio, onClose }: AnnotatorsPanelPr
   }, [audio, projectId]);
 
   useEffect(() => {
-    setAudioUrl(null);
     if (!audio || !hasAudio) return;
-    setAudioLoading(true);
     let cancelled = false;
     audiosApi
       .presign(projectId, audio.id)
@@ -71,7 +72,7 @@ export function AnnotatorsPanel({ projectId, audio, onClose }: AnnotatorsPanelPr
         if (!cancelled) setAudioUrl(r.url);
       })
       .catch((e) => {
-        if (!cancelled) setError(extractError(e, "Không tải được audio"));
+        if (!cancelled) setError(extractError(e, "Không tải được âm thanh"));
       })
       .finally(() => {
         if (!cancelled) setAudioLoading(false);
@@ -114,7 +115,7 @@ export function AnnotatorsPanel({ projectId, audio, onClose }: AnnotatorsPanelPr
           <div className="ds-side-panel-audio">
             {audioLoading && !audioUrl ? (
               <div className="d-flex align-items-center gap-2 text-muted small py-2">
-                <Spinner animation="border" size="sm" /> Đang tải audio...
+                <Spinner animation="border" size="sm" /> Đang tải âm thanh...
               </div>
             ) : audioUrl ? (
               <audio
@@ -160,7 +161,7 @@ export function AnnotatorsPanel({ projectId, audio, onClose }: AnnotatorsPanelPr
                       </div>
                     ) : (
                       <div className="ds-annotator-answer text-muted small">
-                        <i className="bi bi-mic-mute me-1"></i>Audio không khả dụng
+                        <i className="bi bi-mic-mute me-1"></i>Âm thanh không khả dụng
                       </div>
                     )
                   ) : (

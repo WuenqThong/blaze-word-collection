@@ -16,6 +16,9 @@ class DialectFlowTest(unittest.TestCase):
         self.db = sessionmaker(bind=self.engine)()
         self.users = [User(email=f"u{i}@example.test", full_name=f"User {i}", password_hash="test", role=role, account_status="active") for i, role in enumerate(["annotator", "reviewer", "reviewer", "admin", "annotator"])]
         self.db.add_all(self.users)
+        self.db.flush()
+        from app.models.dialect import DialectParticipant
+        self.db.add_all([DialectParticipant(user_id=u.id, review_region='Quảng Nam') for u in self.users[1:3]])
         self.db.commit()
         self.current = self.users[0]
         app.dependency_overrides[get_db] = lambda: self.db
@@ -56,6 +59,8 @@ class DialectFlowTest(unittest.TestCase):
         self.current = self.users[3]
         self.assertEqual(self.client.post("/api/dialect/releases").status_code, 409)
         self.assertEqual(self.client.post(f"/api/dialect/sources/{item['source_id']}/rights", json={"rights_confirmed": True, "note": "Đã rà soát bằng chứng"}).status_code, 200)
+        self.assertEqual(self.client.post('/api/dialect/releases').status_code, 409)  # CURATED is now required.
+        self.client.post(f'/api/dialect/reviews/{cid}/curate', json={'raw': {'text':'từ thử nghiệm','meaning':'nghĩa thử','standard':'bản phổ thông','context':'ví dụ trong gia đình'}})
         release = self.client.post("/api/dialect/releases")
         self.assertEqual(release.status_code, 201, release.text)
         rid = release.json()["id"]
@@ -92,6 +97,7 @@ class DialectFlowTest(unittest.TestCase):
         self.current = self.users[3]
         self.client.post(f"/api/dialect/sources/{item['source_id']}/rights", json={"rights_confirmed": True, "note": "Confirmed source"})
         self.assertEqual(self.client.post("/api/dialect/releases", json={"preview_digest": stale_digest}).status_code, 409)
+        self.client.post(f'/api/dialect/reviews/{cid}/curate', json={'raw': {'text':'từ thử nghiệm','meaning':'nghĩa thử','standard':'bản phổ thông','context':'ví dụ trong gia đình'}})
         preview = self.client.get("/api/dialect/releases/preview").json()
         self.assertEqual(preview["eligible_count"], 1)
         self.assertTrue(preview["items"][0]["eligible"])
@@ -125,7 +131,7 @@ class DialectFlowTest(unittest.TestCase):
         self.assertEqual(sources["total"], 1)
         self.assertEqual(sources["items"][0]["contributions"][0]["id"], item["id"])
         self.assertEqual(self.client.get("/api/dialect/sources?rights_status=confirmed").json()["total"], 0)
-        self.assertEqual(self.client.get("/api/dialect/participants?role=reviewer").json()["total"], 2)
+        self.assertEqual(self.client.get("/api/dialect/participants?role=reviewer").json()["total"], 3)
         self.assertEqual(self.client.get("/api/dialect/participants?role=reviewer&query=User 1").json()["total"], 1)
 
 

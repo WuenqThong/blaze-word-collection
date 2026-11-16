@@ -27,7 +27,7 @@ const ANNOTATE_TABS: { key: TabKey; label: string; icon: string }[] = [
 ];
 
 const COLLECT_TABS: { key: TabKey; label: string; icon: string }[] = [
-  { key: "roleplay", label: "Role play",  icon: "bi-mic" },
+  { key: "roleplay", label: "Vai trò play",  icon: "bi-mic" },
   { key: "members",  label: "Thành viên", icon: "bi-people" },
   { key: "config",   label: "Cấu hình",   icon: "bi-gear" },
 ];
@@ -53,7 +53,7 @@ export function ProjectDetailPage() {
   const projectId = parseProjectId(id);
   const navigate = useNavigate();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = ["admin", "reviewer"].includes(user?.role ?? "");
 
   const [project, setProject] = useState<Project | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -76,7 +76,7 @@ export function ProjectDetailPage() {
           setActiveTab("roleplay");
         }
       })
-      .catch((e) => setError(extractError(e, "Không tải được project")));
+      .catch((e) => setError(extractError(e, "Không tải được dự án")));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
@@ -141,7 +141,7 @@ export function ProjectDetailPage() {
       {isAdmin && !(activeTab === "roleplay" && roleplayDeep) ? (
         <div className="project-header rp-fullbleed">
           <Link to="/projects" className="project-breadcrumb">
-            <i className="bi bi-arrow-left"></i><span>Tất cả project</span>
+            <i className="bi bi-arrow-left"></i><span>Tất cả dự án</span>
           </Link>
 
           <div className="project-header-row">
@@ -166,7 +166,7 @@ export function ProjectDetailPage() {
                       <Dropdown.Toggle
                         as="button"
                         className="project-settings-btn"
-                        title="Mở cài đặt project"
+                        title="Mở cài đặt dự án"
                       >
                         <i className="bi bi-gear"></i>
                       </Dropdown.Toggle>
@@ -212,11 +212,11 @@ export function ProjectDetailPage() {
             <div className="card mb-3">
               <div className="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
                 <div className="flex-grow-1 min-w-0">
-                  <h6 className="mb-1 fw-semibold">Trạng thái project</h6>
+                  <h6 className="mb-1 fw-semibold">Trạng thái dự án</h6>
                   <div className="text-muted small">
-                    {project.status === "draft" && "Bản nháp — chưa thể nhận task. Kích hoạt để bắt đầu phân bổ cho annotator."}
-                    {project.status === "active" && "Đang chạy — annotator có thể nhận task. Đóng khi muốn tạm dừng."}
-                    {project.status === "closed" && "Đã đóng — không nhận thêm task mới. Có thể mở lại bất kỳ lúc nào."}
+                    {project.status === "draft" && "Bản nháp — chưa thể nhận nhiệm vụ. Kích hoạt để bắt đầu phân bổ cho người gán nhãn."}
+                    {project.status === "active" && "Đang chạy — người gán nhãn có thể nhận nhiệm vụ. Đóng khi muốn tạm dừng."}
+                    {project.status === "closed" && "Đã đóng — không nhận thêm nhiệm vụ mới. Có thể mở lại bất kỳ lúc nào."}
                   </div>
                 </div>
                 <div>
@@ -242,13 +242,13 @@ export function ProjectDetailPage() {
             <div className="card mb-3">
               <div className="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
                 <div className="flex-grow-1 min-w-0">
-                  <h6 className="mb-1 fw-semibold">Xoá project</h6>
+                  <h6 className="mb-1 fw-semibold">Xoá dự án</h6>
                   <div className="text-muted small">
-                    Xoá project sẽ xoá toàn bộ audio, annotation, và mọi liên kết liên quan. Hành động không thể hoàn tác.
+                    Xoá dự án sẽ xoá toàn bộ âm thanh, bài gán nhãn, và mọi liên kết liên quan. Hành động không thể hoàn tác.
                   </div>
                 </div>
                 <Button variant="link" className="p-0 text-decoration-none text-danger" onClick={() => { setDeleteConfirm(""); setShowDelete(true); }} disabled={saving}>
-                  <i className="bi bi-trash me-2"></i>Xoá project
+                  <i className="bi bi-trash me-2"></i>Xoá dự án
                 </Button>
               </div>
             </div>
@@ -316,13 +316,13 @@ export function ProjectDetailPage() {
       <Modal show={showDelete} onHide={() => setShowDelete(false)} centered>
         <Modal.Header closeButton className="border-0">
           <Modal.Title className="text-danger">
-            <i className="bi bi-exclamation-triangle me-2"></i>Xoá project?
+            <i className="bi bi-exclamation-triangle me-2"></i>Xoá dự án?
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <p className="mb-3">
-            Bạn sắp xoá project <strong>"{project.name}"</strong>. Toàn bộ audio,
-            annotation, và yêu cầu rút tiền liên quan sẽ bị xoá vĩnh viễn.
+            Bạn sắp xoá dự án <strong>"{project.name}"</strong>. Toàn bộ âm thanh,
+            bài gán nhãn, và yêu cầu rút tiền liên quan sẽ bị xoá vĩnh viễn.
           </p>
           <Alert variant="danger" className="py-2 small">
             <i className="bi bi-info-circle me-1"></i>

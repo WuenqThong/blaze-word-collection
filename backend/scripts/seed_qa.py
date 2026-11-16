@@ -22,6 +22,7 @@ def main():
     from app.core.security import hash_password
     from app.models import User
     from app.models.dialect import DialectContribution
+    from app.models.dialect import DialectParticipant
 
     credentials_path = root / 'accounts.json'
     accounts = json.loads(credentials_path.read_text(encoding='utf-8')) if credentials_path.exists() else []
@@ -39,6 +40,12 @@ def main():
                 db.add(User(email=account['email'], role=account['role'],
                             full_name=account['full_name'], account_status='active',
                             password_hash=hash_password(account['password'])))
+        db.commit()
+        for account in accounts:
+            if account['role'] == 'reviewer':
+                user = db.query(User).filter_by(email=account['email']).one()
+                if db.get(DialectParticipant, user.id) is None:
+                    db.add(DialectParticipant(user_id=user.id, review_region='TP. Hội An'))
         db.commit()
 
     with TestClient(app) as client:

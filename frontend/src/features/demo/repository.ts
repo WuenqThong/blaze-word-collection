@@ -151,7 +151,7 @@ export class DemoRepository {
       !("format" in input) ||
       input.format !== "APPDICHTHUAT_DEMO_BACKUP"
     )
-      throw Error("Không phải bản sao lưu demo.");
+      throw Error("Không phải bản sao lưu minh họa.");
     const value = input as Awaited<ReturnType<DemoRepository["backup"]>>;
     const s = value.state;
     if (
@@ -187,7 +187,7 @@ export class DemoRepository {
       "topics",
     ] as const;
     if (tables.some((k) => !Array.isArray(s[k])))
-      throw Error("Thiếu bảng demo.");
+      throw Error("Thiếu bảng minh họa.");
     if (
       s.sessions.some(
         (x) =>

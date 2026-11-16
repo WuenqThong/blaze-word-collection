@@ -1,18 +1,10 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Dropdown } from "react-bootstrap";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "./AuthContext";
+import { accountInitials } from "./accountIdentity";
 
-const ROLE_LABEL: Record<string, string> = {
-  annotator: "Người góp",
-  reviewer: "Người kiểm duyệt",
-  admin: "Quản trị viên",
-};
-
-function initials(name: string) {
-  const parts = name.trim().split(/\s+/);
-  return ((parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase() || "?";
-}
+const AccountSettingsModal = lazy(async () => ({ default: (await import("../demo/AccountDemo")).AccountSettingsModal }));
 
 /** Signed-in user menu for the /demo top bar: profile, settings, sign out. */
 export function AccountButton() {
@@ -20,32 +12,31 @@ export function AccountButton() {
   const navigate = useNavigate();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [settings, setSettings] = useState<string | null>(null);
   if (loading) return <span className="demo-note" role="status">Đang kiểm tra phiên…</span>;
   if (sessionError || !user) return <Link className="btn btn-primary demo-login-button" to="/login">Đăng nhập</Link>;
   return (
     <div className="demo-account">
       <Dropdown align="end">
         <Dropdown.Toggle variant="" className="demo-account-toggle" id="demo-account-menu" aria-label={`Tài khoản ${user.full_name}`}>
-          <span className="demo-avatar" aria-hidden="true">{initials(user.full_name)}</span>
-          <span className="demo-account-name">{user.full_name}</span>
+          <span className="demo-avatar" aria-hidden="true">{accountInitials(user.full_name)}</span>
         </Dropdown.Toggle>
         <Dropdown.Menu className="demo-account-menu">
-          <Dropdown.Header>
-            <strong>{user.full_name}</strong>
-            <span title={user.email}>{user.email}</span>
-            <small>{ROLE_LABEL[user.role] ?? user.role}</small>
-          </Dropdown.Header>
+          <div className="bz-account-identity">
+            <span className="demo-avatar" aria-hidden="true">{accountInitials(user.full_name)}</span>
+            <div><strong>{user.full_name}</strong><span title={user.email}>{user.email}</span></div>
+          </div>
+          <div className="bz-account-language"><span><i className="bi bi-translate" aria-hidden="true" /> Ngôn ngữ</span><span lang="vi">Tiếng Việt</span></div>
           <Dropdown.Divider />
-          <Dropdown.Item as={Link} to="/demo/account">
-            <i className="bi bi-person" aria-hidden="true" /> Hồ sơ
-          </Dropdown.Item>
-          <Dropdown.Item as={Link} to="/demo/account#cai-dat">
+          <Dropdown.Item as="button" onClick={() => setSettings("ho-so")}>
             <i className="bi bi-gear" aria-hidden="true" /> Cài đặt
           </Dropdown.Item>
-          <Dropdown.Divider />
+          <Dropdown.Item as={Link} to="/demo/rights">
+            <i className="bi bi-question-circle" aria-hidden="true" /> Hướng dẫn & quyền dữ liệu
+          </Dropdown.Item>
           <Dropdown.Item
             as="button"
-            className="text-danger"
+            className="bz-account-logout"
             disabled={busy}
             onClick={async () => {
               setBusy(true);
@@ -64,6 +55,7 @@ export function AccountButton() {
           </Dropdown.Item>
         </Dropdown.Menu>
       </Dropdown>
+      {settings && <Suspense fallback={<span role="status">Đang tải cài đặt…</span>}><AccountSettingsModal initialSection={settings} onHide={() => setSettings(null)} /></Suspense>}
       {error && <span role="alert">{error}</span>}
     </div>
   );

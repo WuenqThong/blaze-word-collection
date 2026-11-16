@@ -1,7 +1,8 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
+from app.core.roles import canonical_role
 
 
 class RegisterRequest(BaseModel):
@@ -24,6 +25,11 @@ class UserPublic(BaseModel):
     last_login_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
+
+    @field_validator('role')
+    @classmethod
+    def normalize_role(cls, value):
+        return canonical_role(value)
 
 
 class AuthResponse(BaseModel):

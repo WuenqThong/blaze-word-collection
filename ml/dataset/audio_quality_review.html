@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="vi">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Phase 4 — duyệt chất lượng audio</title>
+<style>
+body{font:17px system-ui;margin:24px auto;padding:0 20px;max-width:1100px;color:#222;background:#fafafa}
+header{position:sticky;top:0;background:#fafafa;padding:12px 0;border-bottom:1px solid #ccc;z-index:1}
+article{background:white;border:1px solid #ccc;border-radius:8px;margin:18px 0;padding:18px}
+.players{display:flex;gap:24px;flex-wrap:wrap}audio{width:300px;max-width:100%}label{display:block;margin:12px 0}
+button,select,input,textarea{font:inherit;padding:8px;max-width:100%}textarea{width:95%}button{cursor:pointer}
+.note{color:#555}h1{font-size:24px}.error{color:#a00}
+</style>
+<h1>Phase 4 — duyệt 90 bản phái sinh</h1>
+<p>Đối chiếu bản gốc với bản có hiệu ứng. Chỉ chọn <b>Giữ</b> khi nghe đủ lời, transcript còn đúng và hiệu ứng phù hợp. Chọn <b>Loại</b> nếu mất/che lời; chọn <b>Cần xem lại</b> nếu chưa chắc. Kiểm tra kỹ thuật không thay thế nghe duyệt.</p>
+<p class="note">Đây là bộ ứng viên. Dữ liệu còn thiếu nhóm người nói/phiên thu, chưa chia train/test và chưa phải release huấn luyện. File JSON bạn xuất cần được nhập và kiểm tra trước khi thay đổi trạng thái dataset.</p>
+<p id="template-help" hidden>Đây là file mẫu, chưa chứa audio. <a href="file:///E:/blaze-voice-lab/datasets/fpt-audio-phase4-candidate-20261111-v2/review-quality.html">Mở trang duyệt đủ 90 bản tại đây</a>.</p>
+<header>
+<label>Người duyệt <input id="reviewer" placeholder="Tên hoặc mã người duyệt"></label>
+<label>Hiển thị <select id="filter"><option value="all">Tất cả</option><option value="pending">Chưa duyệt</option><option value="approved">Giữ</option><option value="rejected">Loại</option><option value="needs_review">Cần xem lại</option></select></label>
+<span id="counts"></span> <button id="approve-all" type="button">Duyệt toàn bộ</button> <button id="export">Xuất kết quả duyệt JSON</button>
+<div id="notice" role="status"></div>
+</header>
+<main id="items"></main>
+<script>
+const rows=(()=>{try{return __ROWS_JSON__}catch{return []}})();
+if(!rows.length){document.querySelector('#template-help').hidden=false;document.querySelector('header').hidden=true}else{
+const key='blaze-audio-phase4-'+rows[0].audio_sha256;
+const decisions={};let saved={};
+try{saved=JSON.parse(localStorage.getItem(key)||'{}')}catch(e){document.querySelector('#notice').textContent='Không đọc được lưu tạm; hãy xuất JSON để giữ kết quả.'}
+for(const r of rows){const d=saved.decisions?.[r.sample_id];decisions[r.sample_id]=d&&['pending','approved','rejected','needs_review'].includes(d.status)?d:{status:'pending',notes:'',reviewed_at:null,reviewer:''}}
+document.querySelector('#reviewer').value=saved.reviewer||'';
+const nodes={},selects={};
+function save(){try{localStorage.setItem(key,JSON.stringify({reviewer:document.querySelector('#reviewer').value,decisions}))}catch(e){document.querySelector('#notice').textContent='Không lưu tạm được; hãy xuất JSON trước khi đóng trang.'}update()}
+function update(){const counts={pending:0,approved:0,rejected:0,needs_review:0};for(const d of Object.values(decisions))counts[d.status]++;document.querySelector('#counts').textContent=`Giữ ${counts.approved} · Loại ${counts.rejected} · Cần xem lại ${counts.needs_review} · Chưa duyệt ${counts.pending}`;const f=document.querySelector('#filter').value;for(const r of rows)nodes[r.sample_id].hidden=f!=='all'&&decisions[r.sample_id].status!==f}
+for(const r of rows){
+ const a=document.createElement('article');nodes[r.sample_id]=a;
+ const heading=document.createElement('h2');heading.textContent=r.sample_id;a.append(heading);
+ const text=document.createElement('p');text.textContent=r.text;a.append(text);
+ const technical=document.createElement('p');technical.className='note';technical.textContent='Kỹ thuật: '+r.technical_status+(r.technical_notes?' — '+r.technical_notes:'');a.append(technical);
+ const players=document.createElement('div');players.className='players';
+ for(const [title,path] of [['Bản gốc chuẩn hóa',r.parent_audio_path],['Bản có hiệu ứng',r.audio_path]]){const box=document.createElement('div');box.append(document.createTextNode(title),document.createElement('br'));const player=document.createElement('audio');player.controls=true;player.preload='none';player.src=path;box.append(player);players.append(box)}a.append(players);
+ const label=document.createElement('label');label.textContent='Kết quả ';const select=document.createElement('select');
+ for(const [value,title] of [['pending','Chưa duyệt'],['approved','Giữ — nghe đủ lời'],['rejected','Loại'],['needs_review','Cần xem lại']]){const option=document.createElement('option');option.value=value;option.textContent=title;if(value==='approved'&&r.technical_status==='rejected')option.disabled=true;select.append(option)}
+ selects[r.sample_id]=select;select.value=decisions[r.sample_id].status;
+ select.onchange=()=>{const reviewer=document.querySelector('#reviewer').value.trim();if(select.value!=='pending'&&!reviewer){select.value=decisions[r.sample_id].status;document.querySelector('#notice').textContent='Điền người duyệt trước khi ghi quyết định.';return}const d=decisions[r.sample_id];d.status=select.value;d.reviewer=reviewer;d.reviewed_at=new Date().toISOString();save()};label.append(select);a.append(label);
+ const noteLabel=document.createElement('label');noteLabel.textContent='Ghi chú / lý do loại hoặc cần xem lại';const notes=document.createElement('textarea');notes.rows=2;notes.value=decisions[r.sample_id].notes;notes.oninput=()=>{decisions[r.sample_id].notes=notes.value;save()};noteLabel.append(notes);a.append(noteLabel);document.querySelector('#items').append(a)
+}
+document.querySelector('#reviewer').oninput=save;document.querySelector('#filter').onchange=update;
+document.querySelector('#approve-all').textContent=`Duyệt toàn bộ ${rows.length} bản`;
+document.querySelector('#approve-all').onclick=()=>{
+ const reviewer=document.querySelector('#reviewer').value.trim();
+ if(!reviewer){document.querySelector('#notice').textContent='Điền người duyệt trước khi duyệt toàn bộ.';document.querySelector('#reviewer').focus();return}
+ const reviewed_at=new Date().toISOString();let approved=0,skipped=0;
+ for(const r of rows){if(r.technical_status==='rejected'){skipped++;continue}Object.assign(decisions[r.sample_id],{status:'approved',reviewer,reviewed_at});selects[r.sample_id].value='approved';approved++}
+ save();document.querySelector('#notice').textContent=`Đã ghi Giữ cho ${approved} bản dưới tên ${reviewer}.`+(skipped?` Bỏ qua ${skipped} bản lỗi kỹ thuật.`:'')+' Bấm Xuất kết quả duyệt JSON để lưu file.';
+};
+document.querySelector('#export').onclick=()=>{
+ for(const r of rows){const d=decisions[r.sample_id];if((d.status==='rejected'||d.status==='needs_review')&&!d.notes.trim()){document.querySelector('#notice').textContent='Cần ghi lý do cho '+r.sample_id;return}if(d.status!=='pending'&&!d.reviewer){document.querySelector('#notice').textContent='Thiếu người duyệt cho '+r.sample_id;return}if(d.status==='approved'&&r.technical_status==='rejected'){document.querySelector('#notice').textContent='Không thể giữ file lỗi kỹ thuật '+r.sample_id;return}}
+ const result={schema:'audio-quality-review-v1',exported_at:new Date().toISOString(),records:rows.map(r=>({sample_id:r.sample_id,audio_sha256:r.audio_sha256,...decisions[r.sample_id]}))};
+ const blob=new Blob([JSON.stringify(result,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download='phase4-audio-review.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);document.querySelector('#notice').textContent='Đã xuất kết quả. Gửi đường dẫn file JSON để nhập duyệt và đóng gói bản cập nhật.'
+};update();
+}
+</script>
+</html>

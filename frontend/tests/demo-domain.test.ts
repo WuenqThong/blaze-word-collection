@@ -84,7 +84,7 @@ describe("10-question game invariants", () => {
         id: "drafts",
         index,
         answer: {
-          ...blankAnswer(),
+          ...blankAnswer(), originalText: "Cách nói địa phương thử nghiệm",
           text: "Nháp",
           meaning: "Nghĩa",
           standard: "Phổ thông",
@@ -108,7 +108,7 @@ describe("10-question game invariants", () => {
         id: "drafts",
         index,
         answer: {
-          ...blankAnswer(),
+          ...blankAnswer(), originalText: "Cách nói địa phương thử nghiệm",
           text: s.sessions[0].questions[index].accepted[0],
         },
         next: index + 1,
@@ -149,7 +149,7 @@ describe("10-question game invariants", () => {
         id: "session-1",
         index: i,
         answer: {
-          ...blankAnswer(),
+          ...blankAnswer(), originalText: "Cách nói địa phương thử nghiệm",
           text: i === 3 ? "" : `Đáp án ${i}`,
           meaning: "Nghĩa",
           standard: "Phổ thông",
@@ -197,7 +197,7 @@ describe("10-question game invariants", () => {
       type: "answer",
       id: "strict",
       index: 2,
-      answer: { ...blankAnswer(), text: "sai" },
+      answer: { ...blankAnswer(), originalText: "Cách nói địa phương thử nghiệm", text: "sai" },
       next: 3,
     });
     expect(s.sessions[0].cursor).toBe(2);
@@ -212,7 +212,7 @@ describe("10-question game invariants", () => {
         id: "strict",
         index: i,
         answer: {
-          ...blankAnswer(),
+          ...blankAnswer(), originalText: "Cách nói địa phương thử nghiệm",
           text: s.sessions[0].questions[i].accepted.at(-1)!,
         },
         next: i + 1,
@@ -252,7 +252,7 @@ describe("10-question game invariants", () => {
         type: "draftAnswer",
         id: "a",
         index: 0,
-        answer: { ...blankAnswer(), text: "vẫn làm được" },
+        answer: { ...blankAnswer(), originalText: "Cách nói địa phương thử nghiệm", text: "vẫn làm được" },
       },
     );
     expect(s.sessions[0].answers[0].text).toBe("vẫn làm được");
@@ -331,7 +331,7 @@ describe("review, export and abuse controls", () => {
     expect(publiclyVisible(changed, changed.contributions[0])).toBe(false);
     expect(changed.contributions[0].raw).toEqual(s.contributions[0].raw);
   });
-  it("enforces independent votes, rubric and reviewer region", () => {
+  it("enforces independent votes and rubric with unified reviewer scope", () => {
     let s = sample(seed());
     expect(() =>
       send(s, {
@@ -362,7 +362,7 @@ describe("review, export and abuse controls", () => {
         checks: [true, true, true, true],
         note: "region",
       }),
-    ).toThrow(/phạm vi/);
+    ).not.toThrow();
     s = send(s, { type: "actor", id: "reviewer-b" });
     expect(() =>
       send(s, {
@@ -518,5 +518,20 @@ describe("review, export and abuse controls", () => {
       { type: "start", id: "a", examId: "exam-demo", consent, campaignId: "" },
     );
     expect(online.sessions).toHaveLength(1);
+  });
+});
+
+describe("consent ownership", () => {
+  it("lets staff restrict but only the owner expand consent", () => {
+    const initial = seed(); initial.actor = "member";
+    const stored = sample(initial);
+    const narrowed = { ...consent, train: false, public: false };
+    const restricted = applyCommand(stored, { type: "consent", id: "c1", consent: narrowed, withdraw: false });
+    for (const actor of ["reviewer-a", "admin"]) {
+      const staff = { ...restricted, actor };
+      expect(() => applyCommand(staff, { type: "consent", id: "c1", consent, withdraw: false })).toThrow("Chỉ người góp");
+      expect(() => applyCommand(staff, { type: "consent", id: "c1", consent: { ...narrowed, collect: false }, withdraw: false })).not.toThrow();
+    }
+    expect(applyCommand(restricted, { type: "consent", id: "c1", consent, withdraw: false }).contributions.find(c => c.id === "c1")?.consent.train).toBe(true);
   });
 });

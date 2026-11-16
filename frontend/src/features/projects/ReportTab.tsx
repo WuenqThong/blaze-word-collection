@@ -41,8 +41,14 @@ export function ReportTab({ projectId, enabledTaskTypes }: ReportTabProps) {
   const [progressFilter, setProgressFilter] = useState<ItemProgress | "">("");
   const [taskFilter, setTaskFilter] = useState<TaskType | "">("");
 
-  useEffect(() => {
+  const [previousInputs, setPreviousInputs] = useState([projectId]);
+  if (previousInputs[0] !== projectId) {
+    setPreviousInputs([projectId]);
     setLoading(true);
+    setError(null);
+  }
+
+  useEffect(() => {
     projectsApi.report(projectId)
       .then(setData)
       .catch((e) => setError(extractError(e, "Không tải được báo cáo")))
@@ -95,28 +101,28 @@ export function ReportTab({ projectId, enabledTaskTypes }: ReportTabProps) {
               <div className="report-stat report-stat-default">
                 <div className="report-stat-label">Tổng câu</div>
                 <div className="report-stat-value">{s.total_items}</div>
-                <div className="report-stat-hint">Redundancy ×{s.redundancy}</div>
+                <div className="report-stat-hint">Số người cùng gán nhãn ×{s.redundancy}</div>
               </div>
             </Col>
             <Col md={3} sm={6}>
               <div className="report-stat report-stat-idle">
                 <div className="report-stat-label">Chưa gán</div>
                 <div className="report-stat-value">{s.not_started}</div>
-                <div className="report-stat-hint">0 annotation</div>
+                <div className="report-stat-hint">0 bài gán nhãn</div>
               </div>
             </Col>
             <Col md={3} sm={6}>
               <div className="report-stat report-stat-progress">
                 <div className="report-stat-label">Đang gán</div>
                 <div className="report-stat-value">{s.in_progress}</div>
-                <div className="report-stat-hint">1..{s.redundancy - 1} annotation</div>
+                <div className="report-stat-hint">1..{s.redundancy - 1} bài gán nhãn</div>
               </div>
             </Col>
             <Col md={3} sm={6}>
               <div className="report-stat report-stat-done">
                 <div className="report-stat-label">Hoàn tất</div>
                 <div className="report-stat-value">{s.completed}</div>
-                <div className="report-stat-hint">≥{s.redundancy} annotation</div>
+                <div className="report-stat-hint">≥{s.redundancy} bài gán nhãn</div>
               </div>
             </Col>
           </Row>
@@ -161,7 +167,7 @@ export function ReportTab({ projectId, enabledTaskTypes }: ReportTabProps) {
               value={taskFilter}
               onChange={(e) => setTaskFilter(e.target.value as TaskType | "")}
             >
-              <option value="">Mọi loại task</option>
+              <option value="">Mọi loại nhiệm vụ</option>
               {enabledTaskTypes.map((tt) => (
                 <option key={tt} value={tt}>{TASK_TYPE_LABELS[tt].title}</option>
               ))}
@@ -201,7 +207,7 @@ function ReportRow({ item }: { item: AudioReportItem }) {
           </span>
           {item.is_golden && (
             <span className="queue-tag-golden">
-              <i className="bi bi-shield-check"></i> golden
+              <i className="bi bi-shield-check"></i> mẫu kiểm tra chuẩn
             </span>
           )}
           <span className={`report-pill ${pm.cls}`}>
@@ -210,8 +216,8 @@ function ReportRow({ item }: { item: AudioReportItem }) {
         </div>
         <div className="small text-muted">
           {item.latest_at
-            ? <>Annotation gần nhất: {formatTime(item.latest_at)}</>
-            : <>Chưa có annotation nào</>
+            ? <>Bài gán nhãn gần nhất: {formatTime(item.latest_at)}</>
+            : <>Chưa có bài gán nhãn nào</>
           }
           {item.num_annotations > 0 && <> · {item.distinct_answers} đáp án phân biệt</>}
         </div>
@@ -219,7 +225,7 @@ function ReportRow({ item }: { item: AudioReportItem }) {
 
       <div className="report-row-progress">
         <div className="d-flex align-items-baseline justify-content-between mb-1">
-          <span className="small text-muted">Annotator</span>
+          <span className="small text-muted">Người gán nhãn</span>
           <span className="report-progress-count">
             <strong>{item.num_annotations}</strong>/<span className="text-muted">{item.num_required}</span>
           </span>

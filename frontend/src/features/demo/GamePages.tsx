@@ -1,37 +1,47 @@
-import { useEffect, useState } from "react";
+import { ResponsiveTable } from "../../components/ResponsiveTable";
+import { useEffect, useRef, useState } from "react";
+import { GameSyncStatus } from "./GameSyncStatus";
 import {
   Link,
+  Navigate,
   useBlocker,
   useNavigate,
   useParams,
   useSearchParams,
 } from "react-router-dom";
 import { Modal } from "react-bootstrap";
+import { systemText } from "../../lib/display";
 import { errorMessage } from "../../api/client";
 import { useDemo } from "./context";
-import { blankAnswer, canAdvance, isAnswered, uid, gameAllocation } from "./domain";
+import { blankAnswer, canAdvance, isAnswered, isGateProposal, wrongAttempts, uid, gameAllocation } from "./domain";
 import { consentDefault, gateCount } from "./seed";
 import { Action, Field, Heading, Panel, Status } from "./ui";
 import type { Answer, Consent, Session } from "./types";
+import { answerOriginal, isOpenQuestion } from "./dialectOriginal";
+import { playerPrompt } from "./playerPrompt";
 import { formatLabels } from "./questionFormats";
 import { verificationLabel } from "./datasetBank";
 import { REGION_CHOICES } from "./regions";
+import { localQualityReasons, qualityReasonLabels } from "./contributionQuality";
 import { RegionOptions } from "./RegionOptions";
+import { useBlurValidation } from "../auth/useBlurValidation";
 
 export function ConsentFields({
   value,
   onChange,
+  required = true,
 }: {
   value: Consent;
   onChange: (value: Consent) => void;
+  required?: boolean;
 }) {
   return (
     <fieldset className="demo-consents">
       <legend>Phạm vi bạn đồng ý</legend>
       {(
         [
-          ["collect", "Tiếp nhận & kiểm duyệt (bắt buộc)"],
-          ["train", "Cho phép sử dụng dữ liệu để huấn luyện (bắt buộc)"],
+          ["collect", `Tiếp nhận & kiểm duyệt${required ? " (bắt buộc)" : ""}`],
+          ["train", `Cho phép sử dụng dữ liệu để huấn luyện${required ? " (bắt buộc)" : ""}`],
           ["public", "Cho phép công khai dữ liệu"],
         ] as const
       ).map(([k, label]) => (
@@ -39,7 +49,7 @@ export function ConsentFields({
           <input
             type="checkbox"
             checked={value[k]}
-            aria-required={k !== "public"}
+            aria-required={required && k !== "public" ? true : undefined}
             onChange={(e) => onChange({ ...value, [k]: e.target.checked })}
           />
           {label}
@@ -71,11 +81,6 @@ export function StartGame() {
       <div className="demo-game-start">
         <Panel title={campaign?.title ?? "Bắt đầu lượt chơi "}>
           {pending && <p className="demo-note">Bạn có một lượt chưa hoàn thành. Bấm tiếp tục để quay lại câu đang làm.</p>}
-          <p>
-            {selected?.layout === "sourced2"
-              ? "Câu 1–2: Trả lời đúng cả hai câu để mở phần tiếp theo · Câu 3–8: Xác nhận hoặc sửa từ, câu chưa kiểm chứng · Câu 9–10: Đóng góp từ và câu mới."
-              : "Câu 1–3: Làm quen · Câu 4–5: Giải thích ý nghĩa từ ngữ · Câu 6 và 8: Kiểm tra kiến thức · Câu 7: Diễn đạt bằng tiếng phổ thông · Câu 9–10: Đóng góp từ và câu mới."}
-          </p>
           <form
             onSubmit={async (e) => {
               e.preventDefault();
@@ -118,8 +123,8 @@ export function StartGame() {
           >
                         {!selected && !pending && (
               <p role="alert">
-                Chưa có đề đang mở. Điều phối viên có thể tạo và phát hành đề
-                demo.
+                Chưa có đề đang mở. Người kiểm duyệt có thể tạo và phát hành đề
+                minh họa.
               </p>
             )}
             {!pending && <ConsentFields value={consent} onChange={setConsent} />}
@@ -154,12 +159,13 @@ export function GamePage() {
   const { state } = useDemo();
   const session = state.sessions.find((x) => x.id === id);
   const actor = state.people.find((p) => p.id === state.actor)!;
-  if (!session || (session.owner !== actor.id && actor.role !== "admin"))
+  if (!session || (session.owner !== actor.id && !["admin", "reviewer"].includes(actor.role)))
     return (
       <Panel title="Không tìm thấy lượt thuộc vai trò này">
         <Link to="/demo/play">Về chọn đề</Link>
       </Panel>
     );
+  if (session.owner !== actor.id) return <Navigate to={`/demo/reviewer/sessions/${session.id}`} replace />;
   return <GameSession key={session.id} session={session} />;
 }
 function GameSession({ session }: { session: Session }) {
@@ -167,6 +173,11 @@ function GameSession({ session }: { session: Session }) {
   const actor = state.people.find((p) => p.id === state.actor)!;
   const [notice, setNotice] = useState("");
   const blocker = useBlocker(session.state === "playing");
+  const step = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    step.current?.focus({ preventScroll: true });
+    if (window.innerWidth < 600) step.current?.scrollIntoView?.({ block: "nearest" });
+  }, [session.cursor, session.serverViewKey]);
   useEffect(() => {
     if (session.state !== "playing") return;
     const f = (e: BeforeUnloadEvent) => {
@@ -192,13 +203,14 @@ function GameSession({ session }: { session: Session }) {
           </p>
         </Heading>
           <AnswerTable session={session} />
+          <GameSyncStatus session={session} />
           <div className="demo-actions">
             <Link className="btn btn-primary" to="/demo/history">
               Xem lịch sử và quản lý quyền
             </Link>
-            {actor.role === "admin" && <Link
+            {["admin", "reviewer"].includes(actor.role) && <Link
               className="btn btn-outline-primary"
-              to={`/demo/admin/sessions/${session.id}`}
+              to={`/demo/reviewer/sessions/${session.id}`}
             >
               Xem trong quản trị
             </Link>}
@@ -210,6 +222,7 @@ function GameSession({ session }: { session: Session }) {
     );
   return (
     <>
+      <GameSyncStatus session={session} />
       <progress
         aria-label="Tiến trình 10 câu"
         max={10}
@@ -219,12 +232,14 @@ function GameSession({ session }: { session: Session }) {
         {session.questions.map((q, i) => (
           <Action
             key={q.id}
-            disabled={!canAdvance(session, i)}
+            disabled={!canAdvance(session, i) || !!session.serverConflict}
+            current={session.cursor === i}
+            label={`Câu ${i + 1}, ${session.answers[i].skipped ? "đã bỏ qua" : isAnswered(session.answers[i]) ? "đã trả lời" : "chưa trả lời"}${session.cursor === i ? ", đang mở" : ""}`}
             onClick={() =>
               run({ type: "moveSession", id: session.id, cursor: i })
             }
           >
-            Q{String(i + 1).padStart(2, "0")}
+            Câu {i + 1}
             {session.answers[i].skipped
               ? " · bỏ qua"
               : isAnswered(session.answers[i])
@@ -233,14 +248,16 @@ function GameSession({ session }: { session: Session }) {
           </Action>
         ))}
       </nav>
+      {session.answers.some((a, i) => session.questions[i].kind === "GATE" && (isGateProposal(a) || a.attempts.some(t => t.proposal))) && <p className="demo-note" role="status">Đề xuất đáp án mới đã được lưu cùng lượt chơi. Khi bạn gửi bài, đề xuất sẽ được chuyển sang mục cần kiểm tra; chưa được tính là đáp án đúng.</p>}
       {notice && (
         <p className="demo-error" role="alert">
           {notice}
         </p>
       )}
+      <div ref={step} tabIndex={-1} inert={!!session.serverConflict} className="game-active-step" aria-label={session.cursor < 10 ? `Nội dung câu ${session.cursor + 1}` : "Xem lại và gửi bài"}>
       {session.cursor < 10 ? (
         <QuestionForm
-          key={session.cursor}
+          key={`${session.cursor}.${session.serverViewKey ?? ""}`}
           session={session}
           notify={setNotice}
         />
@@ -248,10 +265,10 @@ function GameSession({ session }: { session: Session }) {
         <MetadataForm session={session} />
       ) : (
         <Panel title="Xem lại trước khi gửi">
-          <AnswerTable session={session} />
           <p>
             Hiện sống: {session.region} · Lớn lên: {session.upbringing}
           </p>
+          <AnswerTable session={session} />
           <div className="demo-actions">
             <Action
               onClick={() =>
@@ -276,12 +293,13 @@ function GameSession({ session }: { session: Session }) {
           </div>
         </Panel>
       )}
-      <Modal
+      </div>
+      <Modal aria-label="Rời lượt chơi"
         show={blocker.state === "blocked"}
         centered
         onHide={() => blocker.state === "blocked" && blocker.reset()}
       >
-        <Modal.Header closeButton>
+        <Modal.Header closeLabel="Đóng" closeButton>
           <Modal.Title>Rời lượt chơi đang làm?</Modal.Title>
         </Modal.Header>
         <Modal.Body>
@@ -306,7 +324,7 @@ function GameSession({ session }: { session: Session }) {
     </>
   );
 }
-function QuestionForm({
+export function QuestionForm({
   session,
   notify,
 }: {
@@ -316,38 +334,46 @@ function QuestionForm({
   const { run } = useDemo();
   const index = session.cursor;
   const q = session.questions[index];
+  const openQuestion = isOpenQuestion(q);
   const standardAnswer = q.format !== "choice";
   const [answer, setAnswer] = useState<Answer>(() =>
     structuredClone(session.answers[index] ?? blankAnswer()),
   );
-  const [saving, setSaving] = useState(0);
+  const draftSave = useRef<Promise<unknown>>(Promise.resolve());
   const [busy, setBusy] = useState(false);
+  const validation = useBlurValidation({
+    originalText: () => !openQuestion || answer.originalText?.trim() ? "" : "Nhập cách nói địa phương hoặc chọn Bỏ qua câu này.",
+    standard: () => !standardAnswer || (answer.standard || answer.text).trim() ? "" : "Nhập cách nói phổ thông hoặc chọn Bỏ qua câu này.",
+    explanation: () => !openQuestion || (answer.meaning + answer.context).trim() ? "" : "Giải thích nghĩa hoặc nêu một ví dụ cách dùng.",
+  });
   async function update(
-    key: keyof Pick<
+    key: "explanation" | keyof Pick<
       Answer,
-      "text" | "meaning" | "standard" | "context" | "suggestion"
+      "originalText" | "text" | "meaning" | "standard" | "context" | "suggestion"
     >,
     value: string,
   ) {
-    const next = { ...answer, [key]: value, ...(standardAnswer && key === "standard" ? { text: value } : {}), skipped: false };
+    const next = { ...answer, ...(key === "explanation" ? { meaning: value, context: "" } : { [key]: value }), ...(standardAnswer && key === "standard" ? { text: value } : {}), skipped: false };
     setAnswer(next);
-    setSaving((n) => n + 1);
     try {
-      await run({ type: "draftAnswer", id: session.id, index, answer: next });
+      const saved = run({ type: "draftAnswer", id: session.id, index, answer: next });
+      draftSave.current = saved;
+      await saved;
     } catch {
       /* visible global error */
-    } finally {
-      setSaving((n) => n - 1);
     }
   }
   async function choose(id: string) {
     const option = q.options?.find((o) => o.id === id);
     if (!option) return;
     const next = { ...answer, selectedOptionId: id, text: option.text, skipped: false };
-    setAnswer(next); setSaving((n) => n + 1);
-    try { await run({ type: "draftAnswer", id: session.id, index, answer: next }); }
+    setAnswer(next);
+    try {
+      const saved = run({ type: "draftAnswer", id: session.id, index, answer: next });
+      draftSave.current = saved;
+      await saved;
+    }
     catch { /* Global save error remains visible. */ }
-    finally { setSaving((n) => n - 1); }
   }
   async function next(skip = false) {
     notify("");
@@ -357,14 +383,15 @@ function QuestionForm({
     }
     if (
       !skip &&
-      index >= 8 &&
-      ![answer.meaning, answer.standard, answer.context].every((v) => v.trim())
+      openQuestion &&
+      !(answer.originalText?.trim() && answer.standard.trim() && (answer.meaning.trim() || answer.context.trim()))
     ) {
-      notify("Câu đóng góp mới cần nghĩa, bản phổ thông và ngữ cảnh.");
+      notify("Nhập cách nói địa phương, cách nói phổ thông và phần giải thích cho câu đóng góp mới.");
       return;
     }
     setBusy(true);
     try {
+      await draftSave.current;
       const result = await run({
         type: "answer",
         id: session.id,
@@ -375,7 +402,7 @@ function QuestionForm({
       const x = result.sessions.find((x) => x.id === session.id)!;
       if (x.cursor === index)
         notify(
-          `Chưa trả lời đúng đủ ${gateCount(session.exam)} câu đầu. Bạn có thể sửa đáp án; các lần thử đã được lưu.`,
+          `Chưa hoàn tất ${gateCount(session.exam)} câu đầu. Câu này đã sai ${wrongAttempts(x.answers[index])} lần; từ lần sai thứ 4, hệ thống lưu thành đề xuất đáp án mới và cho làm tiếp.`,
         );
       else notify("");
     } catch (e) {
@@ -385,17 +412,22 @@ function QuestionForm({
     }
   }
   return (
-    <Panel title={`Q${String(index + 1).padStart(2, "0")} / 10`}>
-      <p className="demo-question-text">{q.prompt}</p>
+    <Panel title={`Câu ${index + 1} / 10`}>
+      <p className="demo-question-text">{playerPrompt(q)}</p>
       {q.format && <p className="demo-note">{formatLabels[q.format]}</p>}
       {q.format === "fill" && <p className="demo-blank-template">{q.blankTemplate}</p>}
       <form
         onSubmit={(e) => {
           e.preventDefault();
+          if (!validation.validate(e)) return;
           void next();
         }}
       >
         <fieldset disabled={busy}>
+          {openQuestion && <Field label="Cách nói địa phương *">
+            <textarea name="originalText" rows={3} value={answer.originalText ?? ""} maxLength={5000} onChange={e => void update("originalText", e.target.value)} onBlur={() => validation.blur("originalText")} aria-invalid={!!validation.errors.originalText} aria-describedby={validation.errors.originalText ? "game-original-error" : undefined} />
+          </Field>}
+          {validation.errors.originalText && <p className="bz-field-error" id="game-original-error" role="alert">{validation.errors.originalText}</p>}
           {q.format === "choice" ? <fieldset className="demo-choice-list">
             <legend>Chọn một đáp án</legend>
             {q.options?.map((o) => <label key={o.id} className={`demo-choice ${answer.selectedOptionId === o.id ? "is-selected" : ""}`}>
@@ -403,59 +435,51 @@ function QuestionForm({
               <span>{o.text}</span>
             </label>)}
           </fieldset> : <Field label="Cách nói phổ thông *">
-            {q.format === "short" || q.format === "fill" ? <input type="text" value={answer.standard || answer.text} maxLength={5000} onChange={(e) => void update("standard", e.target.value)} /> :
+            {q.format === "short" || q.format === "fill" ? <input name="standard" type="text" value={answer.standard || answer.text} maxLength={5000} onChange={(e) => void update("standard", e.target.value)} onBlur={() => validation.blur("standard")} aria-invalid={!!validation.errors.standard} aria-describedby={validation.errors.standard ? "game-standard-error" : undefined} /> :
             <textarea
               rows={3}
+              name="standard"
               value={answer.standard || answer.text}
               onChange={(e) => void update("standard", e.target.value)}
               maxLength={5000}
+              onBlur={() => validation.blur("standard")} aria-invalid={!!validation.errors.standard} aria-describedby={validation.errors.standard ? "game-standard-error" : undefined}
             />}
           </Field>}
-          {!["GATE", "GOLD"].includes(q.kind) && (
+          {validation.errors.standard && <p className="bz-field-error" id="game-standard-error" role="alert">{validation.errors.standard}</p>}
+          {(
             <>
-              {(["meaning", "standard", "context"] as const).filter((k) => !standardAnswer || k !== "standard").map((k) => (
-                <Field
-                  key={k}
-                  label={
-                    [
-                      "Nghĩa bạn muốn giải thích",
-                      "Cách nói phổ thông",
-                      "Ví dụ / ngữ cảnh",
-                    ][["meaning", "standard", "context"].indexOf(k)] + (index >= 8 ? " *" : " · tùy chọn")
-                  }
-                >
-                  <textarea
-                    rows={2}
-                    value={answer[k]}
-                    onChange={(e) => void update(k, e.target.value)}
-                    maxLength={5000}
-                  />
-                </Field>
-              ))}
+              {<Field label={openQuestion ? "Giải thích *" : "Giải thích · tùy chọn"}>
+                <textarea
+                  rows={3}
+                  name="explanation"
+                  value={[answer.meaning, answer.context].filter(Boolean).join("\n\n")}
+                  onChange={(e) => void update("explanation", e.target.value)}
+                  placeholder="Giải thích nghĩa hoặc nêu ví dụ cách dùng."
+                  maxLength={5000}
+                  onBlur={() => validation.blur("explanation")} aria-invalid={!!validation.errors.explanation} aria-describedby={validation.errors.explanation ? "game-explanation-error" : undefined}
+                />
+              </Field>}
             </>
           )}
-          {["GATE", "GOLD"].includes(q.kind) && (
-            <Field label="Đề xuất đáp án (tùy chọn)">
-              <input
-                value={answer.suggestion}
-                onChange={(e) => void update("suggestion", e.target.value)}
-                maxLength={1000}
-              />
-            </Field>
-          )}
+          {validation.errors.explanation && <p className="bz-field-error" id="game-explanation-error" role="alert">{validation.errors.explanation}</p>}
           <div className="demo-actions">
             <Action
-              disabled={index === 0 || saving > 0}
-              onClick={() =>
-                run({ type: "moveSession", id: session.id, cursor: index - 1 })
-              }
+              disabled={index === 0}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  await draftSave.current;
+                  await run({ type: "moveSession", id: session.id, cursor: index - 1 });
+                } catch (e) { notify(errorMessage(e)); }
+                finally { setBusy(false); }
+              }}
             >
               Câu trước
             </Action>
-            <Action disabled={saving > 0} onClick={() => next(true)}>
+            <Action onClick={() => next(true)}>
               Bỏ qua câu này
             </Action>
-            <button className="btn btn-primary" disabled={busy || saving > 0}>
+            <button className="btn btn-primary" disabled={busy}>
               Lưu & tiếp tục
             </button>
           </div>
@@ -466,10 +490,11 @@ function QuestionForm({
 }
 function MetadataForm({ session }: { session: Session }) {
   const { run } = useDemo();
+  const choices = session.allowedRegions ?? REGION_CHOICES;
   const [meta, setMeta] = useState({
-    region: REGION_CHOICES.includes(session.region) ? session.region : "",
-    upbringing: REGION_CHOICES.includes(session.upbringing) ? session.upbringing : "",
-    usage: REGION_CHOICES.includes(session.usage) ? session.usage : "",
+    region: choices.includes(session.region) ? session.region : "",
+    upbringing: choices.includes(session.upbringing) ? session.upbringing : "",
+    usage: choices.includes(session.usage) ? session.usage : "",
   });
   return (
     <Panel title="Bạn thường nghe cách nói này ở đâu?">
@@ -520,9 +545,9 @@ function MetadataForm({ session }: { session: Session }) {
 }
 export function AnswerTable({ session, showQuality = false }: { session: Session; showQuality?: boolean }) {
   return (
-    <div className="demo-table-scroll">
+    <ResponsiveTable>
       <table>
-        <caption>{showQuality ? `Đáp án snapshot đề v${session.exam.version}` : "Câu trả lời của bạn"}</caption>
+        <caption>{showQuality ? `Đáp án của bộ đề tại thời điểm bắt đầu, phiên bản ${session.exam.version}` : "Câu trả lời của bạn"}</caption>
         <thead>
           <tr>
             <th>Câu</th>
@@ -534,11 +559,13 @@ export function AnswerTable({ session, showQuality = false }: { session: Session
         <tbody>
           {session.questions.map((q, i) => (
             <tr key={q.id}>
-              <td>Q{String(i + 1).padStart(2, "0")}</td>
+              <td>Câu {i + 1}</td>
               <td>
                 <strong>{q.prompt}</strong>
                 {showQuality && q.format && <small>Dạng câu: {formatLabels[q.format]}</small>}
-                {showQuality && q.provenance && <small>Nguồn: {q.provenance.sheet || "Đóng góp mới"} · {q.provenance.rowId} · {q.provenance.sense} · {verificationLabel[q.provenance.verification]} · Câu biên soạn. <a href={q.provenance.url} target="_blank" rel="noreferrer">Dataset</a></small>}
+                {showQuality && q.provenance && <small>Nguồn: {q.provenance.sheet ? systemText(q.provenance.sheet) : "Đóng góp mới"} · {q.provenance.rowId} · {q.provenance.sense} · {verificationLabel[q.provenance.verification]} · Câu biên soạn. <a href={q.provenance.url} target="_blank" rel="noreferrer">Bộ dữ liệu</a></small>}
+                <p>Cách nói địa phương: {answerOriginal(q, session.answers[i]) || "Chưa có bản gốc"}</p>
+                <p>Cách nói phổ thông: {session.answers[i].standard || session.answers[i].text || "Chưa trả lời"}</p>
                 <p>
                   {session.answers[i].skipped
                     ? "Đã bỏ qua"
@@ -553,6 +580,9 @@ export function AnswerTable({ session, showQuality = false }: { session: Session
                 {session.answers[i].context && (
                   <p>Ngữ cảnh: {session.answers[i].context}</p>
                 )}
+                {!session.answers[i].skipped && !["GATE", "GOLD"].includes(q.kind) && localQualityReasons({
+                  ...session.answers[i], text: answerOriginal(q, session.answers[i]), kind: "word", region: "", topic: "", partOfSpeech: "", variants: "", keywords: "", evidence: "", method: "game", family: "", confidence: "", response: "answer", mediaIds: [],
+                }, q).map(reason => <p className="demo-note" key={reason}>Cần kiểm tra chất lượng: {qualityReasonLabels[reason]} Bản gốc được giữ nguyên.</p>)}
                 {session.answers[i].suggestion && (
                   <p>Đề xuất: {session.answers[i].suggestion}</p>
                 )}
@@ -570,12 +600,15 @@ export function AnswerTable({ session, showQuality = false }: { session: Session
                           ? "Đạt"
                           : "Khác tham chiếu"}{" "}
                       · {a.at}
+                      {a.proposal && <span> · Đề xuất mới: {a.proposal} (chưa xác nhận)</span>}
                     </p>
                   ))}
                 </details>
               </td>}
               {showQuality && <td>
-                {session.answers[i].attempts.at(-1)?.correct === true
+                {q.kind === "GATE" && isGateProposal(session.answers[i])
+                  ? "Đề xuất mới · chờ kiểm tra"
+                  : session.answers[i].attempts.at(-1)?.correct === true
                   ? "Đạt"
                   : session.answers[i].attempts.at(-1)?.correct === false
                     ? "Khác tham chiếu"
@@ -585,6 +618,6 @@ export function AnswerTable({ session, showQuality = false }: { session: Session
           ))}
         </tbody>
       </table>
-    </div>
+    </ResponsiveTable>
   );
 }

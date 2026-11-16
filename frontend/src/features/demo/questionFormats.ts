@@ -3,6 +3,9 @@ import type { Question } from "./types";
 export const formatLabels = { choice: "Trắc nghiệm", short: "Trả lời ngắn", fill: "Điền từ", open: "Trả lời mở" };
 const key = (s: string) => s.normalize("NFC").trim().toLocaleLowerCase("vi").replace(/[.!?,;:]+$/, "").replace(/\s+/g, " ");
 export function questionErrors(q: Question): string[] {
+  // Server catalogs omit answer keys for contributors. Validation and grading
+  // remain authoritative on the server for these versioned questions.
+  if (q.serverRevision) return [];
   const errors: string[] = [];
   if (q.format === "choice") {
     const options = q.options ?? [];

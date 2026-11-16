@@ -1,3 +1,4 @@
+import { systemText } from "../../lib/display";
 import { errorMessage } from "../../api/client";
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -10,6 +11,8 @@ import { repository } from "./repository";
 import type { Consent, Raw, Session } from "./types";
 import { isTestSession } from "./testSessions";
 import { MyContributions } from "./MyContributions";
+import { useBlurValidation } from "../auth/useBlurValidation";
+import { Modal } from "react-bootstrap";
 
 export function MediaPreview({ id }: { id: string }) {
   const { state } = useDemo();
@@ -80,11 +83,11 @@ export function MediaAttach({
   async function attach(blob: Blob, name: string) {
     try {
       if (!rights) throw Error("Xác nhận quyền media trước khi đính kèm.");
-      if (blob.size > 25 * 1024 * 1024) throw Error("File demo tối đa 25 MB.");
+      if (blob.size > 25 * 1024 * 1024) throw Error("Tệp minh họa tối đa 25 MB.");
       if (!/^(audio|image|video)\//.test(blob.type))
-        throw Error("Chỉ nhận audio, ảnh hoặc video.");
+        throw Error("Chỉ nhận âm thanh, ảnh hoặc đoạn phim.");
       if (blob.type.startsWith("audio") && !audioAllowed)
-        throw Error("Chọn phạm vi đồng ý audio trước.");
+        throw Error("Chọn phạm vi đồng ý âm thanh trước.");
       const id = uid();
       await repository().putBlob(id, blob);
       await run({
@@ -112,12 +115,12 @@ export function MediaAttach({
   async function record() {
     setError("");
     if (!rights || !audioAllowed) {
-      setError("Cần đồng ý audio và xác nhận quyền trước khi thu.");
+      setError("Cần đồng ý âm thanh và xác nhận quyền trước khi thu.");
       return;
     }
     try {
       if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder)
-        throw Error("Trình duyệt chưa hỗ trợ thu âm; bạn có thể tải file.");
+        throw Error("Trình duyệt chưa hỗ trợ thu âm; bạn có thể tải tệp.");
       stream.current = await navigator.mediaDevices.getUserMedia({
         audio: true,
       });
@@ -139,14 +142,14 @@ export function MediaAttach({
       setRecording(true);
     } catch {
       setError(
-        "Không mở được micro hoặc quyền bị từ chối. Dùng nút Tải file thay thế.",
+        "Không mở được micro hoặc quyền bị từ chối. Dùng nút Tải tệp thay thế.",
       );
       stream.current?.getTracks().forEach((t) => t.stop());
     }
   }
   return (
     <div className="demo-media-box">
-      <h3>Audio / ảnh / video tùy chọn</h3>
+      <h3>Âm thanh / ảnh / đoạn phim tùy chọn</h3>
       <label className="demo-checkbox">
         <input
           type="checkbox"
@@ -170,7 +173,7 @@ export function MediaAttach({
           disabled={!rights || recording}
           onClick={() => fileInput.current?.click()}
         >
-          Tải file
+          Tải tệp
         </button>
         <input
           ref={fileInput}
@@ -192,7 +195,7 @@ export function MediaAttach({
       {ids.map((id) => (
         <div key={id}>
           <MediaPreview id={id} />
-          <Field label="Transcript / mô tả ảnh-video">
+          <Field label="Bản chép lời / mô tả ảnh-đoạn phim">
             <textarea
               value={state.media.find((m) => m.id === id)?.transcript ?? ""}
               onChange={(e) => {
@@ -248,7 +251,7 @@ function ContributionForm({
       draft?.raw ??
       (previous
         ? { ...previous.raw }
-        : { ...blankRaw(), kind, method: task?.method ?? "direct" }),
+        : { ...blankRaw(), kind, region: task?.region ?? "", method: task?.method ?? "direct" }),
   );
   const [consent, setConsent] = useState<Consent>(
     () => draft?.consent ?? (previous ? previous.consent : consentDefault()),
@@ -258,6 +261,8 @@ function ContributionForm({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(0);
+  const requiredLabels = { text: "cách nói địa phương", meaning: "nghĩa của cách nói", standard: "cách nói phổ thông", context: "một ví dụ sử dụng", evidence: "nguồn hoặc nơi bạn nghe cách nói", region: "vùng bạn nghe cách nói" };
+  const validation = useBlurValidation(Object.fromEntries(Object.entries(requiredLabels).map(([key, label]) => [key, () => raw.response !== "answer" || raw[key as keyof typeof requiredLabels].trim() ? "" : `Nhập ${label}.`])));
   function save(r: Raw, c: Consent) {
     setSaving((n) => n + 1);
     void run({ type: "draft", key: draftKey, raw: r, consent: c, parent })
@@ -283,8 +288,8 @@ function ContributionForm({
   }, [saving, sent]);
   if (sent)
     return (
-      <Panel title={live ? "Đã tiếp nhận bản gốc" : "Đã tiếp nhận bản gốc DEMO"}>
-        <p>Mã: {id}. Chưa tự xác minh hoặc cấp credit.</p>
+      <Panel title={live ? "Đã tiếp nhận bản gốc" : "Đã tiếp nhận bản gốc Minh họa"}>
+        <p>Mã: {id}. Chưa tự xác minh hoặc cấp lượt sử dụng.</p>
         <Link className="btn btn-primary" to="/demo/history">
           Xem đóng góp của tôi
         </Link>
@@ -303,7 +308,7 @@ function ContributionForm({
         }
       >
         <p>
-          Giữ RAW, khai nguồn và chọn quyền sử dụng. Nháp giữ trong kho demo
+          Giữ Bản gốc, khai nguồn và chọn quyền sử dụng. Nháp giữ trong kho minh họa
           riêng.
         </p>
       </Heading>
@@ -314,9 +319,10 @@ function ContributionForm({
             {task.mediaId && <MediaPreview id={task.mediaId} />}
           </>
         )}
-        <form
+        <form className="direct-contribution-form" noValidate aria-busy={busy}
           onSubmit={async (e) => {
             e.preventDefault();
+            if (!validation.validate(e)) return;
             setBusy(true);
             setError("");
             try {
@@ -327,8 +333,8 @@ function ContributionForm({
                 ) &&
                 !consent.audio
               )
-                throw Error("Mẫu có audio nhưng chưa đồng ý audio.");
-              await run({ type: "contribute", id, raw, consent, parent });
+                throw Error("Mẫu có âm thanh nhưng chưa đồng ý âm thanh.");
+              await run({ type: "contribute", id, raw: live ? { ...raw, mediaIds: [] } : raw, consent: live ? { ...consent, audio: false } : consent, parent });
               await run({ type: "clearDraft", key: draftKey });
               setSent(true);
             } catch (err) {
@@ -338,6 +344,7 @@ function ContributionForm({
             }
           }}
         >
+          <fieldset disabled={busy}>
           {task && (
             <Field label="Cách trả lời">
               <select
@@ -383,6 +390,7 @@ function ContributionForm({
                 }
               >
                 <textarea
+                  name={k}
                   rows={k === "context" ? 3 : 2}
                   required={
                     [
@@ -395,19 +403,26 @@ function ContributionForm({
                   }
                   value={raw[k]}
                   maxLength={5000}
+                  onBlur={() => { if (k in requiredLabels) validation.blur(k); }}
+                  aria-invalid={!!validation.errors[k]} aria-describedby={validation.errors[k] ? `direct-${k}-error` : undefined}
                   onChange={(e) => update(k, e.target.value)}
                 />
+                {validation.errors[k] && <span className="bz-field-error" id={`direct-${k}-error`} role="alert">{validation.errors[k]}</span>}
               </Field>
             ))}
-            <Field label="Vùng dùng">
+            <Field label="Vùng dùng *">
               <select
-                value={raw.region}
+                name="region" value={raw.region} required
+                onBlur={() => validation.blur("region")} aria-invalid={!!validation.errors.region} aria-describedby={validation.errors.region ? "direct-region-error" : undefined}
                 onChange={(e) => update("region", e.target.value)}
               >
+                <option value="">Chọn vùng</option>
+                {raw.region && !state.regions.includes(raw.region) && <option value={raw.region}>{raw.region}</option>}
                 {state.regions.map((v) => (
                   <option key={v}>{v}</option>
                 ))}
               </select>
+              {validation.errors.region && <span className="bz-field-error" id="direct-region-error" role="alert">{validation.errors.region}</span>}
             </Field>
             <Field label="Chủ đề">
               <select
@@ -438,14 +453,14 @@ function ContributionForm({
               setId(uid());
             }}
           />
-          <MediaAttach
+          {live ? <p className="demo-note">Pilot hiện chỉ thu văn bản, chưa tiếp nhận bản ghi âm, ảnh hoặc đoạn phim.</p> : <MediaAttach
             ids={raw.mediaIds}
             audioAllowed={consent.audio}
             onChange={(ids) => update("mediaIds", ids)}
-          />
+          />}
           {!!duplicates(state, raw, parent ?? undefined).length && (
             <p className="demo-note">
-              Có mẫu trùng nội dung/nghĩa/vùng. Bạn vẫn gửi RAW; reviewer sẽ đối
+              Có mẫu trùng nội dung/nghĩa/vùng. Bạn vẫn gửi Bản gốc; người duyệt sẽ đối
               chiếu, không xóa bản gốc.
             </p>
           )}
@@ -456,12 +471,12 @@ function ContributionForm({
           )}
           <div className="demo-actions">
             <button className="btn btn-primary" disabled={busy || saving > 0}>
-              {busy ? "Đang gửi…" : live ? "Gửi đóng góp" : "Gửi đóng góp DEMO"}
+              {busy ? "Đang gửi…" : live ? "Gửi đóng góp" : "Gửi đóng góp Minh họa"}
             </button>
             <Action
               onClick={async () => {
                 await run({ type: "clearDraft", key: draftKey });
-                setRaw({ ...blankRaw(), kind });
+                setRaw({ ...blankRaw(), kind, region: task?.region ?? "" });
                 setConsent(consentDefault());
                 setId(uid());
               }}
@@ -472,6 +487,7 @@ function ContributionForm({
               {saving ? "Đang lưu…" : "Nháp đã lưu hoặc chưa thay đổi."}
             </span>
           </div>
+          </fieldset>
         </form>
       </Panel>
     </>
@@ -499,6 +515,7 @@ function sessionSummary(s: Session) {
 
 export function HistoryDemo() {
   const { state, run } = useDemo();
+  const [withdrawTarget, setWithdrawTarget] = useState<Session | null>(null);
   return (
     <>
       <Heading title="Lịch sử và quyền dữ liệu">
@@ -509,16 +526,17 @@ export function HistoryDemo() {
           .map((s) => (
             <div className="demo-list-row" key={s.id}>
               <div>
-                <Link to={`/demo/game/${s.id}`}>{s.exam.title}</Link>
+                <Link to={`/demo/game/${s.id}`}>{s.exam.title.replace(/Dataset1/g, "Bộ dữ liệu số 1")}</Link>
                 <small>{sessionSummary(s)}</small>
+                {s.receipts && <small>{Object.entries(s.receipts).map(([kind, r]) => `${({ started: "Bắt đầu", submitted: "Gửi bài", withdraw: "Rút lượt", withdrawn: "Rút lượt" } as Record<string, string>)[kind] ?? "Trạng thái lượt"}: ${r.done ? "máy chủ đã xác nhận" : r.reason ? systemText(r.reason) : "chờ máy chủ xác nhận"}`).join(" · ")}</small>}
+                {!!s.serverPending?.length && <small>{s.serverPending.length} thao tác chờ đồng bộ. {s.serverConflict ? "Cần mở lượt để xử lý xung đột." : "Nháp vẫn được giữ trên thiết bị."}</small>}
+                {!s.serverAllocated && <small>Lượt chơi trên thiết bị này chưa được tính vào thống kê trên máy chủ.</small>}
                 <Status value={s.state} />
               </div>
               {s.state !== "withdrawn" && (
-                <Action
-                  onClick={() => run({ type: "withdrawSession", id: s.id })}
-                >
+                <button type="button" className="btn btn-outline-danger" onClick={() => setWithdrawTarget(s)}>
                   Rút dữ liệu lượt này
-                </Action>
+                </button>
               )}
             </div>
           ))}
@@ -527,6 +545,11 @@ export function HistoryDemo() {
         )}
       </Panel>
       <MyContributions />
+      <Modal aria-label="Xác nhận rút lượt" centered show={!!withdrawTarget} onHide={() => setWithdrawTarget(null)}>
+        <Modal.Header closeButton closeLabel="Đóng"><Modal.Title>Rút dữ liệu lượt chơi?</Modal.Title></Modal.Header>
+        <Modal.Body>Mẫu trong lượt này sẽ bị ngừng sử dụng và không khôi phục lại được. Bản gốc và lịch sử vẫn được giữ.</Modal.Body>
+        <Modal.Footer><button type="button" className="btn btn-outline-secondary" onClick={() => setWithdrawTarget(null)}>Giữ dữ liệu</button><Action onClick={async () => { if (!withdrawTarget) return; await run({ type: "withdrawSession", id: withdrawTarget.id }); setWithdrawTarget(null); }}>Xác nhận rút lượt</Action></Modal.Footer>
+      </Modal>
     </>
   );
 }
@@ -536,7 +559,7 @@ export function TasksDemo() {
     <>
       <Heading title="Khơi thêm cách nói mới">
         <p>
-          Chín phương thức dùng chung form có ngữ cảnh, nguồn và phản hồi không
+          Chín phương thức dùng chung biểu mẫu có ngữ cảnh, nguồn và phản hồi không
           biết/không có từ riêng.
         </p>
       </Heading>

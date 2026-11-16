@@ -10,6 +10,7 @@ export interface Contribution {
   raw: ContributionForm; status: ContributionStatus; withdrawn_at: string | null;
   created_at: string; rights_confirmed: boolean; rights_note: string;
   vote_count: number; has_voted: boolean;
+  quality_reasons?: string[];
   votes: {reviewer_id: number; verdict: string; rubric: Record<string, boolean>; note: string}[];
   events: {action: string; note: string; created_at: string}[];
 }

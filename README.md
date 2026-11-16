@@ -1,101 +1,63 @@
-# Blaze Voice Collection
+# Blaze Word Collection
 
-> **Bản hiện tại (09/11/2026):** `/` chuyển vào [APPDICHTHUAT](http://localhost:7777/demo). Game 10 câu cần đăng nhập qua backend. Đề, lượt chơi và media vẫn ở IndexedDB; mẫu đóng góp, kiểm duyệt và release đồng bộ qua `/api/dialect` theo mặc định. Game chữ không cần MinIO. Đọc [bản bàn giao tổng hợp](docs/CLAUDE_HANDOFF.md) để phân biệt game, luồng phương ngữ qua API và nền tảng audio bên dưới. Claude Code bắt đầu từ [CLAUDE.md](CLAUDE.md).
-
-Nền tảng **thu thập & gán nhãn dữ liệu giọng nói** có **tích điểm thưởng quy đổi ra tiền**.
-
-- **Admin** tạo project, upload audio / câu hỏi, cấu hình điểm cho từng loại task, duyệt kết quả và duyệt yêu cầu rút tiền.
-- **Annotator** nhận task (nghe → viết, xác nhận nhãn, hỏi đáp bằng giọng nói, role-play với voice bot), tích điểm, rút tiền về tài khoản ngân hàng.
-
-> Backend gốc dùng tên kỹ thuật **Audio Annotator** (`app_name`); giao diện dùng thương hiệu **Blaze**. Repo: `Actable-AI/blaze-voice-collection`.
+Nền tảng thu thập phương ngữ bằng văn bản: trò chơi, góp trực tiếp, hai người duyệt độc lập, chỉnh lý và xuất dữ liệu có phiên bản. Người dùng và Reviewer dùng chung frontend/API trên cổng 7777. Audio, ví và role-play legacy tắt trong pilot web.
 
 ## Chạy local trên Windows
 
-Sau khi đã cài dependencies, chạy `./scripts/start-local.ps1` từ thư mục project để bật cả backend (8765) và frontend (7777). Script kiểm tra API qua frontend trước khi báo sẵn sàng; log nằm trong `%TEMP%/blaze-local-dev`. Trang chủ: http://localhost:7777/demo. API frontend dùng `/api` qua Vite proxy để giữ cookie cùng host.
+Cài Node.js và Python, chuẩn bị dependencies:
 
-## Tính năng audio và ví legacy
-
-| Nhóm | Mô tả |
-|---|---|
-| Gán nhãn audio | 3 loại task: `audio_label` (nghe → viết transcript), `audio_verify` (xác nhận nhãn đúng/sai), `qa` (trả lời câu hỏi bằng text / lựa chọn / ghi âm). |
-| Thu thập role-play | Project loại `collect`: annotator nói chuyện realtime với voice-bot agent qua WebSocket, backend ghi âm stereo và lưu vào MinIO. |
-| Phân bổ task | Khoá task theo TTL 10 phút, đảm bảo redundancy, ưu tiên task chưa ai làm / đang bất đồng, tái-gán ngẫu nhiên để kiểm tra độ nhất quán. |
-| Kiểm soát chất lượng | Behavior signals (thời gian, % audio đã nghe), admin duyệt từng annotation, tự động khoá user có tỉ lệ bị reject ≥ 30%. |
-| Điểm & ví | Điểm chờ duyệt / đã xác nhận, quy đổi `1 điểm = 50 VND`, rút tối thiểu 100 điểm, admin duyệt → đánh dấu đã trả. |
-| Báo lỗi dữ liệu | Annotator report audio hỏng; admin approve thì annotator vẫn được điểm. |
-
-## Tech stack
-
-- **Backend:** Python 3.12 · FastAPI · SQLAlchemy 2 · SQLite · MinIO (S3) · JWT trong httpOnly cookie
-- **Frontend:** React 19 · TypeScript · Vite · React Router 7 · react-bootstrap · wavesurfer.js
-- **Storage:** MinIO bucket `audios` (file audio, bản ghi âm câu trả lời, bản ghi role-play)
-
-## Chạy nhanh (local, không Docker)
-
-Yêu cầu: Python 3.12, Node 20+, MinIO (`brew install minio/stable/minio`).
-
-```bash
-# 1. MinIO — S3 API :9100, console :9101
-MINIO_ROOT_USER=minioadmin MINIO_ROOT_PASSWORD=minioadmin \
-  minio server .minio_data --address :9100 --console-address :9101
-
-# 2. Backend — http://localhost:8765/api  (Swagger: /docs)
-cd backend
-python3.12 -m venv .venv
-.venv/bin/pip install -r requirements.txt
-cp .env.example .env
-.venv/bin/uvicorn app.main:app --reload --port 8765
-
-# 3. Frontend — http://localhost:7777
+```powershell
 cd frontend
-npm install
-cp .env.example .env
-npm run dev
+npm ci
+cd ..\backend
+py -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+cd ..
+.\scripts\start-local.ps1
 ```
 
-Bảng DB được tạo tự động khi backend khởi động (`Base.metadata.create_all`). Tạo tài khoản admin đầu tiên:
+Mở `http://localhost:7777/demo`. Script build frontend và chạy API cùng một cổng. Sau khi sửa frontend, chạy lại script. `-SkipBuild` chỉ dùng khi đã có bản build mới.
+
+Cấu hình backend theo `backend/.env.example`; không commit `.env`, DB, audio, tài khoản QA hoặc khóa API. Tạo tài khoản quản lý bằng `backend/scripts/create_admin.py --help`. Log local nằm trong `%TEMP%/blaze-local-dev`.
+
+## Kiểm tra
+
+```powershell
+cd frontend
+npm run lint -- --max-warnings 0
+npm run build
+npm test
+cd ..\backend
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+CI kiểm tra frontend, backend với DB tạm và container một cổng. QA riêng: `scripts/start-qa.ps1`; dữ liệu và tài khoản kiểm thử ở ngoài repository.
+
+## Triển khai bằng Docker
+
+Sao chép `.env.pilot.example` thành `.env.pilot`, điền secrets riêng, origin HTTPS và IP proxy được tin cậy. Compose chỉ mở cổng trên loopback, cần reverse proxy theo `deploy/blaze.nginx.conf`.
 
 ```bash
-cd backend
-.venv/bin/python -m scripts.create_admin admin@example.com 'MatKhau@123' "Admin"
+docker compose --env-file .env.pilot build
+docker compose --env-file .env.pilot run --rm app python -m scripts.db_migrate init /data/annotator.db
+docker compose --env-file .env.pilot up -d
 ```
 
-Tài khoản đăng ký qua trang `/register` luôn có role `annotator`.
+`init` chỉ dành cho DB mới. Với DB hiện có, backup rồi dùng `scripts.db_migrate --help` để adopt/upgrade trên bản sao; không khởi tạo đè DB thật. Công cụ backup/restore nằm trong `backend/scripts`. Health check: `/api/health`. Dùng image phát hành cố định và backup DB tương thích khi rollback.
 
-> **Docker:** `docker compose up -d --build` cũng chạy được toàn bộ stack (frontend :7777, backend :8765, MinIO :9100/:9101), nhưng image `minio/minio` và `minio/mc` có thể không pull được từ Docker Hub — khi đó dùng cách chạy local ở trên. Chi tiết: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+## Dữ liệu và quyền sử dụng
 
-## Cấu trúc thư mục
+- Bản gốc phương ngữ và bản phổ thông lưu riêng; câu mở cần nhập nội dung địa phương rõ ràng.
+- Mỗi mẫu cần hai người duyệt độc lập; không tự duyệt. Bất đồng cần người phân xử độc lập.
+- Người góp quyết định quyền sử dụng. Reviewer được thu hẹp quyền, không được tự mở rộng thay người góp.
+- Bản xuất kiểm quyền nguồn, consent, chỉnh lý và chia nhóm trên server. Công cụ `scripts.verify_dataset` kiểm tra tệp đã tải; không thay thế xác minh quyền hiện hành hoặc đánh giá chuyên gia.
+- Mẫu minh họa và dữ liệu chưa được bản địa/chuyên gia xác nhận chưa được coi là dữ liệu huấn luyện chính thức.
 
-```
-.
-├── backend/                 FastAPI JSON API
-│   ├── app/
-│   │   ├── main.py          Khởi tạo app, CORS, đăng ký router
-│   │   ├── core/            config, database, security (JWT/bcrypt), storage (MinIO)
-│   │   ├── models/          SQLAlchemy ORM — audio, phương ngữ, tài khoản và ví
-│   │   ├── schemas/         Pydantic DTO request/response
-│   │   ├── routers/         HTTP + WebSocket endpoints (mỏng, chỉ gọi service)
-│   │   └── services/        Business logic (phân bổ, chấm điểm, ví, role-play…)
-│   └── scripts/create_admin.py
-├── frontend/                Vite + React + TS
-│   └── src/
-│       ├── api/             Hàm gọi API (axios, withCredentials)
-│       ├── features/        Game demo, phương ngữ, auth và các module audio/ví legacy
-│       ├── pages/           Trang cấp cao (Dashboard, Rewards, History, Settings, Withdrawals)
-│       ├── components/      Layout, route guard, provider dùng chung
-│       └── lib/             Type definitions + tiện ích
-├── docs/                    Tài liệu cho developer
-├── docker-compose.yml
-└── test_elevenlabs_realtime_stt.py   Script thử nghiệm STT, không thuộc app
-```
+## Cấu trúc
 
-## Tài liệu
-
-| File | Nội dung |
-|---|---|
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Kiến trúc, domain model, các luồng nghiệp vụ chính (phân bổ, chấm điểm, review, ví, role-play), bảo mật, những gì chưa làm |
-| [docs/CLAUDE_HANDOFF.md](docs/CLAUDE_HANDOFF.md) | Bản đồ dự án hiện tại, API phương ngữ, cách chạy, kết quả kiểm tra và mục lục tài liệu |
-| [docs/API.md](docs/API.md) | Tham chiếu các endpoint nền tảng audio legacy; API hiện tại có ở Swagger backend `/docs` |
-| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Setup, biến môi trường, quy ước code, cách thêm task type / endpoint, xử lý sự cố |
-| [docs/PLAN.md](docs/PLAN.md) | Bản thiết kế ban đầu (roadmap, anti-cheat, payout). **Không phản ánh đúng code hiện tại** — xem ARCHITECTURE trước |
-| [docs/concerns.md](docs/concerns.md) | Các mối lo về bảo mật dữ liệu cần xử lý |
+- `frontend/`: giao diện React và kiểm thử.
+- `backend/`: API, dịch vụ nghiệp vụ, migration và công cụ dữ liệu.
+- `deploy/`: cấu hình proxy; `.github/workflows/`: CI.
+- `ml/`: công cụ thử nghiệm audio/ML độc lập; xem `ml/README.md`. Audio, model và kết quả chạy không nằm trong Git.
+- `test-fixtures/`: dữ liệu tổng hợp cho kiểm thử.
+- `docs/`: tài liệu kỹ thuật nền; báo cáo tiến độ và tài liệu phát sinh không đưa lên repo.

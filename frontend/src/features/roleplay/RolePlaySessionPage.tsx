@@ -26,12 +26,13 @@ export function RolePlaySessionPage() {
   const [, setStatusMsg] = useState<string>("");
   const [elapsed, setElapsed] = useState(0);
   const [agentState, setAgentState] = useState<string>("");
-  const [report, setReport] = useState<Record<string, any> | null>(null);
+  const [report, setReport] = useState<Record<string, unknown> | null>(null);
   const [rating, setRating] = useState<number>(0);
   const [note, setNote] = useState<string>("");
   const [submittingReport, setSubmittingReport] = useState(false);
   const [sideTab, setSideTab] = useState<"guide" | "report">("guide");
 
+  const [sessionInfo, setSessionInfo] = useState<{ taskId: number; language: string; maxDurationSec: number; instructions: string | null } | null>(null);
   const sessionRef = useRef<{
     taskId: number;
     language: string;
@@ -85,7 +86,7 @@ export function RolePlaySessionPage() {
     const session = sessionRef.current;
     if (!session) return;
     setPhase("stopping");
-    setStatusMsg("Đang dừng phiên · backend đang lưu recording…");
+    setStatusMsg("Đang dừng phiên · máy chủ đang lưu bản ghi âm…");
     const clientId = ws.clientId.current;
     try {
       await ws.disconnect();
@@ -148,6 +149,7 @@ export function RolePlaySessionPage() {
         maxDurationSec: startResp.max_duration_sec,
         instructions: startResp.instructions,
       };
+      setSessionInfo(sessionRef.current);
       setStatusMsg("Đang kết nối agent…");
 
       await ws.connect({
@@ -183,7 +185,7 @@ export function RolePlaySessionPage() {
       setPhase("done");
       setStatusMsg("Đã lưu đánh giá.");
     } catch (e) {
-      setError(extractError(e, "Submit đánh giá thất bại"));
+      setError(extractError(e, "Gửi đánh giá thất bại"));
     } finally {
       setSubmittingReport(false);
     }
@@ -192,7 +194,7 @@ export function RolePlaySessionPage() {
   if (error && phase === "idle") return <Alert variant="danger">{error}</Alert>;
   if (!scenario) return <Spinner animation="border" />;
 
-  const max = sessionRef.current?.maxDurationSec ?? scenario.max_duration_sec;
+  const max = sessionInfo?.maxDurationSec ?? scenario.max_duration_sec;
   const isLive = phase === "live";
   const isCalling = phase === "starting" || isLive || phase === "stopping";
   const phoneStatus =
@@ -207,7 +209,7 @@ export function RolePlaySessionPage() {
 
   const selectedTestCase = testCases.find((tc) => tc.id === selectedTestCaseId);
   const instructions =
-    sessionRef.current?.instructions ||
+    sessionInfo?.instructions ||
     (selectedTestCase?.instructions || scenario.instructions);
   const expectedOutcome = selectedTestCase?.expected_outcome;
 
@@ -216,7 +218,7 @@ export function RolePlaySessionPage() {
       {selectedTestCase && (
         <div className="rp-stage-top">
           <div className="rp-test-case-banner">
-            <div className="small text-uppercase text-muted mb-1">Trường hợp đang test</div>
+            <div className="small text-uppercase text-muted mb-1">Trường hợp đang kiểm thử</div>
             <strong>{selectedTestCase.name}</strong>
             {selectedTestCase.description && (
               <div className="small text-muted mt-1">{selectedTestCase.description}</div>
@@ -332,7 +334,7 @@ export function RolePlaySessionPage() {
             className={`rp-side-tab ${sideTab === "report" ? "active" : ""}`}
             onClick={() => setSideTab("report")}
           >
-            <i className="bi bi-pencil-square me-1"></i> Report
+            <i className="bi bi-pencil-square me-1"></i> Báo cáo
             {phase === "done" && <i className="bi bi-check-circle-fill ms-1 text-success"></i>}
           </button>
         </div>
@@ -358,7 +360,7 @@ export function RolePlaySessionPage() {
           </div>
         ) : (
           <div className="rp-side-content">
-            {!sessionRef.current ? (
+            {!sessionInfo ? (
               <p className="text-muted small">Bấm "Gọi" để bắt đầu phiên trước khi đánh giá.</p>
             ) : (
               <>
@@ -392,7 +394,7 @@ export function RolePlaySessionPage() {
                 {report && (
                   <details className="mb-2">
                     <summary className="small text-primary" style={{ cursor: "pointer" }}>
-                      Xem report agent đã thu thập
+                      Xem báo cáo agent đã thu thập
                     </summary>
                     <pre className="small text-muted mt-2 mb-0" style={{ whiteSpace: "pre-wrap", maxHeight: 160, overflow: "auto" }}>
                       {JSON.stringify(report, null, 2)}
@@ -405,7 +407,7 @@ export function RolePlaySessionPage() {
                     {phase === "done" ? (
                       <><i className="bi bi-check-circle-fill text-success me-1"></i>Đã lưu</>
                     ) : phase === "live" ? (
-                      <>Có thể gõ note + chấm sao ngay</>
+                      <>Có thể gõ ghi chú + chấm sao ngay</>
                     ) : null}
                   </span>
                   <Button
@@ -426,12 +428,12 @@ export function RolePlaySessionPage() {
         <div className="text-muted small mt-3">
           <p className="mb-2">
             <i className="bi bi-shield-lock me-1"></i>
-            Phiên (cả giọng bạn và agent) được ghi âm server-side.
+            Phiên (cả giọng bạn và agent) được ghi âm máy chủ-side.
           </p>
           {isLive && (
             <p className="mb-0">
               <i className="bi bi-info-circle me-1"></i>
-              Bạn có thể cắt lời agent — cứ nói, hệ thống sẽ tự ngắt audio.
+              Bạn có thể cắt lời agent — cứ nói, hệ thống sẽ tự ngắt âm thanh.
             </p>
           )}
         </div>

@@ -19,8 +19,8 @@ export interface ReportItem {
 }
 
 export const REPORT_REASON_LABEL: Record<ReportReason, { label: string; icon: string }> = {
-  corrupt:     { label: "Audio bị lỗi / không phát được",     icon: "bi-file-earmark-x" },
-  inaudible:   { label: "Audio quá nhỏ / không nghe rõ",      icon: "bi-volume-mute" },
+  corrupt:     { label: "Âm thanh bị lỗi / không phát được",     icon: "bi-file-earmark-x" },
+  inaudible:   { label: "Âm thanh quá nhỏ / không nghe rõ",      icon: "bi-volume-mute" },
   wrong_label: { label: "Nhãn / câu hỏi gợi ý sai",            icon: "bi-tag" },
   offensive:   { label: "Nội dung phản cảm / không phù hợp",   icon: "bi-shield-exclamation" },
   other:       { label: "Lý do khác",                          icon: "bi-three-dots" },

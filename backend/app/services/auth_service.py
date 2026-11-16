@@ -42,6 +42,9 @@ class AuthService:
             )
 
         user.last_login_at = utcnow()
+        if user.account_status == 'suspended':
+            raise HTTPException(status_code=403, detail="Tài khoản đang bị tạm dừng")
+        self.db.info['actor_id'] = user.id
         self.db.commit()
         self.db.refresh(user)
         return user

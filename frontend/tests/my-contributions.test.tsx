@@ -17,12 +17,12 @@ function item(id: string, text: string, extra: Partial<Contribution> = {}): Cont
   };
 }
 
-function renderWith(contributions: Contribution[]) {
+function renderWith(contributions: Contribution[], syncAction = vi.fn().mockResolvedValue(undefined)) {
   const state: DemoState = { ...seed(), actor: "account:1", contributions };
   const run = vi.fn().mockResolvedValue(state);
   render(
     <MemoryRouter>
-      <DemoContext.Provider value={{ state, run, error: null, clearError: () => {}, live: true }}>
+      <DemoContext.Provider value={{ state, run, refresh: vi.fn(), syncAction, error: null, clearError: () => {}, live: true }}>
         <MyContributions />
       </DemoContext.Provider>
     </MemoryRouter>,
@@ -62,6 +62,28 @@ describe("Đóng góp của tôi table", () => {
 
   it("points to the game when there is nothing yet", () => {
     renderWith([]);
-    expect(screen.getByRole("link", { name: "Chơi game 10 câu" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Chơi trò chơi 10 câu" })).toBeTruthy();
+  });
+});
+
+
+describe("outbox UX", () => {
+  it("shows RAW rejection reason and requires confirmation to discard", async () => {
+    const sync = vi.fn().mockResolvedValue(undefined);
+    renderWith([item("local-rejected", "rứa", { sync: { status: "rejected", approved: true, attempts: 2, reason: "Nguồn chưa hợp lệ" } })], sync);
+    expect(screen.getByText("Nguồn chưa hợp lệ")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Bỏ gửi" }));
+    expect(sync).not.toHaveBeenCalled();
+    expect(screen.getByRole("alertdialog", { name: "Xác nhận bỏ gửi" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Xác nhận bỏ gửi" }));
+    await vi.waitFor(() => expect(sync).toHaveBeenCalledWith("local-rejected", "discard"));
+  });
+  it("sends an existing outbox item only through its explicit action", async () => {
+    const sync = vi.fn().mockResolvedValue(undefined);
+    renderWith([item("old-local", "mô")], sync);
+    expect(sync).not.toHaveBeenCalled();
+    expect(screen.queryByRole("region", { name: "Đồng bộ dữ liệu" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Xác nhận gửi nguyên bản", exact: true }));
+    await vi.waitFor(() => expect(sync).toHaveBeenCalledWith("old-local", "retry"));
   });
 });

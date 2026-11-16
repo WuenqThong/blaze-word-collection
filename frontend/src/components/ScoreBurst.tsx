@@ -13,11 +13,13 @@ interface ScoreBurstProps {
  * Game-style "+N điểm" floating animation với combo multiplier.
  */
 export function ScoreBurst({ trigger, points, combo = 1 }: ScoreBurstProps) {
-  const [active, setActive] = useState(false);
+  return trigger ? <Burst key={trigger} trigger={trigger} points={points} combo={combo} /> : null;
+}
+
+function Burst({ trigger, points, combo = 1 }: ScoreBurstProps) {
+  const [active, setActive] = useState(true);
 
   useEffect(() => {
-    if (!trigger) return;
-    setActive(true);
     const t = setTimeout(() => setActive(false), 1700);
     return () => clearTimeout(t);
   }, [trigger]);
@@ -37,7 +39,7 @@ export function ScoreBurst({ trigger, points, combo = 1 }: ScoreBurstProps) {
           <div className={`score-burst-combo combo-${tier}`}>
             <span className="score-burst-combo-x">×</span>
             <span className="score-burst-combo-num">{combo}</span>
-            {combo >= 5 && <span className="score-burst-combo-label">STREAK!</span>}
+            {combo >= 5 && <span className="score-burst-combo-label">Chuỗi liên tiếp!</span>}
           </div>
         )}
         <div className="score-burst-main">

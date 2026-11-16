@@ -91,7 +91,7 @@ export interface RolePlayTask {
   duration_sec?: number | null;
   has_recording: boolean;
   has_report: boolean;
-  report_data?: Record<string, any> | null;
+  report_data?: Record<string, unknown> | null;
   report_rating?: number | null;
   report_note?: string | null;
   report_submitted_at?: string | null;

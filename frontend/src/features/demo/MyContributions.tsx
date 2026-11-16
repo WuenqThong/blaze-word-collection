@@ -1,3 +1,8 @@
+import { ResponsiveTable } from "../../components/ResponsiveTable";
+import { displayLabel, systemText } from "../../lib/display";
+import { SyncItem } from "./SyncStatus";
+import { qualityReasonLabels } from './contributionQuality';
+import { Modal } from "react-bootstrap";
 import { Fragment, useState } from "react";
 import { Link } from "react-router-dom";
 import { useDemo } from "./context";
@@ -92,14 +97,14 @@ export function MyContributions() {
       {!mine.length ? (
         <div className="demo-empty-inline">
           <p>Bạn chưa có đóng góp nào.</p>
-          <Link className="btn btn-primary" to="/demo/play">Chơi game 10 câu</Link>
+          <Link className="btn btn-primary" to="/demo/play">Chơi trò chơi 10 câu</Link>
         </div>
       ) : (
         <>
           <p className="demo-note" aria-live="polite">
             {rows.length === mine.length ? `${mine.length} đóng góp` : `${rows.length} / ${mine.length} đóng góp khớp bộ lọc`}
           </p>
-          <div className="demo-table-scroll">
+          <ResponsiveTable>
             <table className="demo-my-contributions">
               <thead>
                 <tr>
@@ -123,7 +128,7 @@ export function MyContributions() {
                         <td>{c.raw.meaning || "—"}</td>
                         <td>{c.raw.region || "—"}</td>
                         <td className="demo-nowrap">{formatAt(c.createdAt)}</td>
-                        <td><Status value={c.withdrawn ? "withdrawn" : c.status} /></td>
+                        <td><Status value={c.withdrawn ? "withdrawn" : c.status} />{c.status === 'HOLD' && c.qualityReasons?.map((reason) => <p className="demo-note" key={reason}>{qualityReasonLabels[reason] ?? "Cần kiểm tra chất lượng"}</p>)}<SyncItem c={c} /></td>
                         <td>{consentSummary(c)}</td>
                         <td className="demo-nowrap">
                           <button
@@ -154,11 +159,22 @@ export function MyContributions() {
                 )}
               </tbody>
             </table>
-          </div>
+          </ResponsiveTable>
         </>
       )}
     </Panel>
   );
+}
+
+function ConsentEditor({ c }: { c: Contribution }) {
+  const { run } = useDemo();
+  const [draft, setDraft] = useState(c.consent);
+  const [confirm, setConfirm] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const dirty = JSON.stringify(draft) !== JSON.stringify(c.consent);
+  return <><ConsentFields value={draft} required={false} onChange={next => { setDraft(next); setSaved(false); }} /><p className="demo-note">Thay đổi chỉ có hiệu lực sau khi lưu và xác nhận. Thu hẹp quyền huấn luyện hoặc rút mẫu sẽ chặn các bản xuất liên quan; không tự xóa những bản đã tải về trước đó.</p><Action disabled={!dirty} onClick={() => setConfirm(true)}>Lưu phạm vi sử dụng</Action>{saved && <p role="status">Đã lưu phạm vi sử dụng.</p>}
+    <Modal aria-label="Xác nhận phạm vi sử dụng" centered show={confirm} onHide={() => setConfirm(false)}><Modal.Header closeLabel="Đóng" closeButton><Modal.Title>Xác nhận phạm vi sử dụng</Modal.Title></Modal.Header><Modal.Body><p>Tiếp nhận & kiểm duyệt: {draft.collect ? "Cho phép" : "Không cho phép"}</p><p>Huấn luyện: {draft.train ? "Cho phép" : "Không cho phép"}</p><p>Công khai: {draft.public ? "Cho phép" : "Không cho phép"}</p><p>Quyền mới sẽ được kiểm tra khi tạo hoặc tải bản xuất.</p></Modal.Body><Modal.Footer><button type="button" className="btn btn-outline-secondary" onClick={() => setConfirm(false)}>Quay lại sửa</button><Action onClick={async () => { await run({ type: "consent", id: c.id, consent: draft, withdraw: c.withdrawn }); setConfirm(false); setSaved(true); }}>Xác nhận lưu phạm vi</Action></Modal.Footer></Modal>
+  </>;
 }
 
 function ContributionDetail({ c }: { c: Contribution }) {
@@ -187,8 +203,8 @@ function ContributionDetail({ c }: { c: Contribution }) {
             <ol className="demo-timeline">
               {events.map((e) => (
                 <li key={e.id}>
-                  <span className="demo-nowrap">{formatAt(e.at)}</span> · {EVENT_LABEL[e.action] ?? e.action}
-                  {e.note && e.action !== "SYNC_REJECTED" ? ` — ${e.note}` : ""}
+                  <span className="demo-nowrap">{formatAt(e.at)}</span> · {EVENT_LABEL[e.action] ?? displayLabel(e.action, "Cập nhật dữ liệu")}
+                  {e.note ? ` — ${systemText(e.note)}` : ""}
                 </li>
               ))}
             </ol>
@@ -196,21 +212,19 @@ function ContributionDetail({ c }: { c: Contribution }) {
         )}
       </section>
       <section>
-        <ConsentFields
-          value={c.consent}
-          onChange={(consent) => void run({ type: "consent", id: c.id, consent, withdraw: c.withdrawn }).catch(() => {})}
-        />
+        {!!c.qualityReasons?.length && <p>{c.qualityReasons.map(reason => qualityReasonLabels[reason] ?? "Cần kiểm tra chất lượng").join(" · ")}</p>}
+        {c.id.startsWith("c:") && <ConsentEditor c={c} />}
         <div className="demo-actions">
-          <Link className="btn btn-outline-primary" to={`/demo/contribute?kind=${c.raw.kind}&parent=${c.id}`}>
+          <Link className="btn btn-outline-primary" to={`/demo/contribute?kind=${c.raw.kind}${c.id.startsWith("c:") ? `&parent=${c.id}` : ""}`}>
             Bổ sung phiên bản
           </Link>
-          {!c.withdrawn && !confirm && (
+          {c.id.startsWith("c:") && !c.withdrawn && !confirm && (
             <button type="button" className="btn btn-outline-danger" onClick={() => setConfirm(true)}>
               Rút mẫu này
             </button>
           )}
         </div>
-        {!c.withdrawn && confirm && (
+        {c.id.startsWith("c:") && !c.withdrawn && confirm && (
           <div className="demo-confirm" role="alertdialog" aria-label="Xác nhận rút mẫu">
             <p>
               Mẫu sẽ bị loại khỏi các lần xuất dữ liệu sau và không khôi phục lại được. Bản gốc và

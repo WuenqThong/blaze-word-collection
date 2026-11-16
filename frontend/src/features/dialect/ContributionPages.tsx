@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { displayLabel, systemText } from "../../lib/display";
+import { lazy, Suspense, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Alert, Modal } from "react-bootstrap";
 import { useAuth } from "../auth/AuthContext";
@@ -31,31 +32,23 @@ export function ContributionDetailPage() {
   const r=useResource<Contribution>(`/dialect/contributions/${id}`);
   const [confirm,setConfirm]=useState(false);const [busy,setBusy]=useState(false);const [error,setError]=useState<string|null>(null);
   if(!r.data)return <ResourceState error={r.error} retry={r.reload}/>;
-  const item=r.data;const own=item.owner_id===user?.id;const admin=user?.role==="admin";
+  const item=r.data;const own=item.owner_id===user?.id;const admin=["admin", "reviewer"].includes(user?.role ?? "");
   const context=params.get("from");
   const back=safeBack(params.get("back"),admin)??(context==="review"?"/review":context==="sources"&&admin?"/admin/sources":context==="datasets"&&admin?"/admin/datasets":own?"/my/contributions":admin?"/admin/contributions":"/review");
   return <><Link className="dialect-back-link" to={back}><i className="bi bi-arrow-left" aria-hidden="true"/> Về danh sách</Link><PageHeading eyebrow={`ĐÓNG GÓP #${item.id}`} title="Bản gốc & lịch sử xử lý" description={`Tiếp nhận ${dateLabel(item.created_at)}. Mọi bổ sung được lưu thành phiên bản riêng.`}/>{error&&<Alert variant="danger">{error}</Alert>}
     <div className="dialect-detail-layout"><div><section className="dialect-surface dialect-original"><ContributionContent item={item}/>{item.parent_id&&<Link className="dialect-version-link" to={`/my/contributions/${item.parent_id}?back=${encodeURIComponent(back)}`}><i className="bi bi-layers" aria-hidden="true"/> Bổ sung từ bản gốc #{item.parent_id}</Link>}</section>
-      <section className="dialect-surface dialect-history"><div className="dialect-section-heading"><h2>Lịch sử xử lý</h2><span className="dialect-tag">{item.events.length} sự kiện</span></div><ol className="dialect-timeline">{item.events.map((event,index)=><li key={`${index}.${event.created_at}`}><span className="dialect-timeline-dot"/><div><strong>{ACTIONS[event.action]??event.action}</strong><p>{event.note}</p><small>{dateLabel(event.created_at)}</small></div></li>)}</ol></section></div>
-      <aside className="dialect-surface dialect-permission-panel"><div className="dialect-section-heading"><h2>Tình trạng & quyền dùng</h2><i className="bi bi-shield-check" aria-hidden="true"/></div><UsageStatus item={item}/><p className="dialect-fine-print mt-3">{item.vote_count} phiếu độc lập. Đủ QA, quyền nguồn và đồng ý sử dụng là các điều kiện riêng.</p>{item.rights_note&&<div className="dialect-source-note"><strong>Căn cứ nguồn</strong><p>{item.rights_note}</p></div>}
+      <section className="dialect-surface dialect-history"><div className="dialect-section-heading"><h2>Lịch sử xử lý</h2><span className="dialect-tag">{item.events.length} sự kiện</span></div><ol className="dialect-timeline">{item.events.map((event,index)=><li key={`${index}.${event.created_at}`}><span className="dialect-timeline-dot"/><div><strong>{ACTIONS[event.action]??displayLabel(event.action, "Cập nhật dữ liệu")}</strong><p>{systemText(event.note)}</p><small>{dateLabel(event.created_at)}</small></div></li>)}</ol></section></div>
+      <aside className="dialect-surface dialect-permission-panel"><div className="dialect-section-heading"><h2>Tình trạng & quyền dùng</h2><i className="bi bi-shield-check" aria-hidden="true"/></div><UsageStatus item={item}/><p className="dialect-fine-print mt-3">{item.vote_count} phiếu độc lập. Đủ Kiểm tra chất lượng, quyền nguồn và đồng ý sử dụng là các điều kiện riêng.</p>{item.rights_note&&<div className="dialect-source-note"><strong>Căn cứ nguồn</strong><p>{item.rights_note}</p></div>}
         {item.status==="HOLD"&&!item.withdrawn_at&&<Alert variant="warning">Mẫu cần thêm thông tin. Đọc phản hồi ở lịch sử rồi tạo phiên bản bổ sung.</Alert>}
         {own&&!item.withdrawn_at&&<div className="dialect-owner-actions"><Link className="btn btn-primary" to={`/contribute/new?parent=${item.id}`}>Bổ sung phiên bản mới <i className="bi bi-arrow-right" aria-hidden="true"/></Link><button className="btn btn-outline-danger" onClick={()=>setConfirm(true)}>Rút mẫu này</button><p className="dialect-fine-print">Mỗi phiên bản được quản lý riêng. Bản mới sẽ được đánh giá lại.</p></div>}
         {item.withdrawn_at&&<Alert variant="secondary">Đã rút mẫu. Mẫu này không được đưa vào bản xuất mới.</Alert>}
       </aside>
     </div>
-    <Modal centered show={confirm} onHide={()=>!busy&&setConfirm(false)}><Modal.Header closeButton={!busy}><Modal.Title>Rút quyền sử dụng mẫu #{item.id}?</Modal.Title></Modal.Header><Modal.Body>Mẫu này sẽ bị loại khỏi lần xuất mới và chặn tải các bản xuất đang kiểm soát có chứa mẫu. Bản gốc và lịch sử được giữ lại. Các phiên bản khác không tự động được rút; bản đã tải ra ngoài cần điều phối xử lý.</Modal.Body><Modal.Footer><button className="btn btn-outline-secondary" disabled={busy} onClick={()=>setConfirm(false)}>Giữ mẫu</button><button className="btn btn-danger" disabled={busy} onClick={async()=>{setBusy(true);setError(null);try{await apiClient.post(`/dialect/contributions/${id}/withdraw`);setConfirm(false);r.reload();}catch(e){setError(extractError(e));}finally{setBusy(false);}}}>{busy?"Đang xử lý…":"Xác nhận rút mẫu"}</button></Modal.Footer></Modal>
+    <Modal aria-label="Rút quyền sử dụng mẫu" centered show={confirm} onHide={()=>!busy&&setConfirm(false)}><Modal.Header closeLabel="Đóng" closeButton={!busy}><Modal.Title>Rút quyền sử dụng mẫu #{item.id}?</Modal.Title></Modal.Header><Modal.Body>Mẫu này sẽ bị loại khỏi lần xuất mới và chặn tải các bản xuất đang kiểm soát có chứa mẫu. Bản gốc và lịch sử được giữ lại. Các phiên bản khác không tự động được rút; bản đã tải ra ngoài cần điều phối xử lý.</Modal.Body><Modal.Footer><button className="btn btn-outline-secondary" disabled={busy} onClick={()=>setConfirm(false)}>Giữ mẫu</button><button className="btn btn-danger" disabled={busy} onClick={async()=>{setBusy(true);setError(null);try{await apiClient.post(`/dialect/contributions/${id}/withdraw`);setConfirm(false);r.reload();}catch(e){setError(extractError(e));}finally{setBusy(false);}}}>{busy?"Đang xử lý…":"Xác nhận rút mẫu"}</button></Modal.Footer></Modal>
   </>;
 }
 
+const AccountSettings = lazy(async () => ({ default: (await import("../demo/AccountDemo")).AccountDemo }));
 export function DialectProfilePage() {
-  const r=useResource<{upbringing_area:string;usage_area:string}>("/dialect/profile");
-  if(!r.data)return <ResourceState error={r.error} retry={r.reload}/>;
-  return <ProfileForm initial={r.data}/>;
-}
-function ProfileForm({initial}:{initial:{upbringing_area:string;usage_area:string}}) {
-  const [form,setForm]=useState(initial);const [busy,setBusy]=useState(false);const [message,setMessage]=useState("");const [error,setError]=useState<string|null>(null);
-  return <><PageHeading title="Nơi bạn lớn lên, tiếng bạn thường nghe." description="Thông tin tự khai giúp hiểu bối cảnh. Không dùng hồ sơ này để tự chứng nhận năng lực đánh giá."/>
-    <div className="dialect-profile-layout"><form className="dialect-surface" onSubmit={async e=>{e.preventDefault();setBusy(true);setMessage("");setError(null);try{await apiClient.put("/dialect/profile",form);setMessage("Đã lưu hồ sơ vùng sử dụng.");}catch(err){setError(extractError(err));}finally{setBusy(false);}}}><fieldset disabled={busy}><h2>Hồ sơ vùng sử dụng</h2>{([["upbringing_area","Nơi bạn lớn lên"],["usage_area","Vùng bạn thường nghe / sử dụng phương ngữ"]] as const).map(([key,label])=><div key={key} className="dialect-field"><label htmlFor={`profile-${key}`}>{label} <span className="text-muted">· Tự nguyện</span></label><input id={`profile-${key}`} className="form-control" maxLength={255} placeholder="Ghi địa danh quen thuộc hoặc “Không chắc”" value={form[key]} onChange={e=>{setForm({...form,[key]:e.target.value});setMessage("");}}/></div>)}{message&&<Alert variant="success" role="status">{message}</Alert>}{error&&<Alert variant="danger">{error}</Alert>}<div className="dialect-form-actions"><span>Không cần địa chỉ chi tiết.</span><button className="btn btn-primary" disabled={busy}>{busy?"Đang lưu…":"Lưu hồ sơ"}</button></div></fieldset></form>
-    <aside className="dialect-profile-help"><i className="bi bi-geo-alt" aria-hidden="true"/><h2>Vùng của bạn và vùng của cách nói</h2><p>Một cách nói có thể được nghe ở nơi khác với nơi bạn lớn lên. Bạn vẫn chọn vùng sử dụng riêng cho từng đóng góp.</p><p>Hồ sơ hiện không tự điền hoặc thay đổi nội dung mẫu đã gửi.</p><Link to="/about-data">Hiểu thêm về quyền dữ liệu <i className="bi bi-arrow-right" aria-hidden="true"/></Link></aside></div>
-  </>;
+  return <Suspense fallback={<p role="status">Đang tải cài đặt…</p>}><AccountSettings /></Suspense>;
 }

@@ -12,7 +12,7 @@ export function AnnotatePage() {
         projectId={projectId}
         emptyExtra={
           <Link to={`/projects/${id ?? projectId}`} className="btn btn-outline-primary">
-            Quay lại project
+            Quay lại dự án
           </Link>
         }
       />

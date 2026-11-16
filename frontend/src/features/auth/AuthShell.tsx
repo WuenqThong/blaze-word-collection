@@ -27,26 +27,28 @@ export function AuthShell({ title, subtitle, children, footnote }: {
   </div>;
 }
 
-type FieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, "id"> & { id: string; label: string; aside?: ReactNode };
+type FieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, "id"> & { id: string; label: string; aside?: ReactNode; error?: string };
 
-export function AuthField({ id, label, aside, ...input }: FieldProps) {
+export function AuthField({ id, label, aside, error, ...input }: FieldProps) {
   return <div className="bz-auth-field">
     <div className="bz-auth-label-row"><label htmlFor={id}>{label}</label>{aside}</div>
-    <input id={id} className="bz-auth-input" {...input} />
+    <input id={id} className="bz-auth-input" {...input} aria-invalid={!!error} aria-describedby={error ? `${id}-error` : input["aria-describedby"]} />
+    {error && <p className="bz-field-error" id={`${id}-error`} role="alert">{error}</p>}
   </div>;
 }
 
-export function AuthPasswordField({ id, label, aside, ...input }: Omit<FieldProps, "type">) {
+export function AuthPasswordField({ id, label, aside, error, ...input }: Omit<FieldProps, "type">) {
   const [visible, setVisible] = useState(false);
   return <div className="bz-auth-field">
     <div className="bz-auth-label-row"><label htmlFor={id}>{label}</label>{aside}</div>
     <div className="bz-auth-input bz-auth-password">
-      <input id={id} type={visible ? "text" : "password"} {...input} />
+      <input id={id} type={visible ? "text" : "password"} {...input} aria-invalid={!!error} aria-describedby={error ? `${id}-error` : input["aria-describedby"]} />
       <button type="button" aria-label={visible ? "Ẩn mật khẩu" : "Hiện mật khẩu"} aria-pressed={visible}
         onClick={() => setVisible((v) => !v)}>
         <i className={`bi bi-eye${visible ? "" : "-slash"}`} aria-hidden="true" />
       </button>
     </div>
+    {error && <p className="bz-field-error" id={`${id}-error`} role="alert">{error}</p>}
   </div>;
 }
 

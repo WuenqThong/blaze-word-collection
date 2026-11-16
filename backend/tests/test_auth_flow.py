@@ -34,12 +34,16 @@ with TestClient(app) as client:
     import time
     from jose import jwt
     from app.core.config import get_settings
+    from app.core.security import decode_token
     s = get_settings()
-    old = jwt.encode({'sub': str(me.json()['id']), 'role': 'annotator', 'iat': int(time.time()) - s.access_token_ttl_min * 45,
+    current_claims = decode_token(client.cookies.get(s.cookie_name))
+    old = jwt.encode({'sub': str(me.json()['id']), 'role': 'annotator', 'pwd': current_claims['pwd'], 'iat': int(time.time()) - s.access_token_ttl_min * 45,
                       'exp': int(time.time()) + s.access_token_ttl_min * 15}, s.jwt_secret, algorithm=s.jwt_alg)
     client.cookies.set(s.cookie_name, old)
     renewed = client.get('/api/auth/me')
     assert renewed.status_code == 200 and s.cookie_name + '=' in renewed.headers.get('set-cookie', ''), renewed.headers
+    # Remove the artificial unscoped cookie so the browser-style renewed cookie is used.
+    client.cookies.delete(s.cookie_name, domain='', path='/')
     # Profile: rename (whitespace collapsed), blank rejected.
     assert client.patch('/api/auth/me', json={'full_name': '  Ngọc   Anh '}).json()['full_name'] == 'Ngọc Anh'
     assert client.patch('/api/auth/me', json={'full_name': '   '}).status_code == 422

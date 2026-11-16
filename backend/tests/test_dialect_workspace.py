@@ -20,6 +20,9 @@ class WorkspaceTest(unittest.TestCase):
         roles = ["annotator", "reviewer", "reviewer", "admin", "annotator"]
         self.users = [User(email=f"w{i}@example.test", full_name=f"W {i}", password_hash="x", role=r, account_status="active") for i, r in enumerate(roles)]
         self.db.add_all(self.users)
+        self.db.flush()
+        from app.models.dialect import DialectParticipant
+        self.db.add_all([DialectParticipant(user_id=u.id, review_region='Hội An') for u in self.users[1:3]])
         self.db.commit()
         self.as_user(0)
         app.dependency_overrides[get_db] = lambda: self.db
@@ -146,6 +149,35 @@ class WorkspaceTest(unittest.TestCase):
         self.client.post(f"/api/dialect/contributions/{item['id']}/consent", json={"consent": CONSENT, "withdraw": True})
         self.assertEqual(self.client.post(f"/api/dialect/contributions/{item['id']}/consent", json={"consent": CONSENT}).status_code, 409)
 
+    def test_staff_can_restrict_but_never_expand_contributor_consent(self):
+        from app.models.dialect import DialectContribution, DialectEvent
+        item = self.contribute("consent-owner-only")
+        cid = item['id']
+        original = dict(self.db.get(DialectContribution, cid).raw)
+        restricted = {**CONSENT, 'collect': False, 'train': False}
+        self.client.post(f'/api/dialect/contributions/{cid}/consent', json={'consent': restricted}).raise_for_status()
+        before = self.db.query(DialectEvent).count()
+        for staff in (1, 3):
+            self.as_user(staff)
+            for key in ('collect', 'train', 'public', 'audio'):
+                with self.subTest(role=self.current.role, scope=key):
+                    response = self.client.post(f'/api/dialect/contributions/{cid}/consent', json={'consent': {**restricted, key: True}})
+                    self.assertEqual(response.status_code, 403, response.text)
+            response = self.client.post(f'/api/dialect/contributions/{cid}/consent', json={'consent': {**restricted, 'version': 'dialect-2026-11-v1'}})
+            self.assertEqual(response.status_code, 403)
+        self.assertEqual(self.db.query(DialectEvent).count(), before)
+        self.assertEqual(self.db.get(DialectContribution, cid).raw, original)
+        self.as_user(0)
+        response = self.client.post(f'/api/dialect/contributions/{cid}/consent', json={'consent': CONSENT})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.as_user(1)
+        response = self.client.post(f'/api/dialect/contributions/{cid}/consent', json={'consent': restricted})
+        self.assertEqual(response.status_code, 200, response.text)
+        response = self.client.post(f'/api/dialect/contributions/{cid}/consent', json={'consent': restricted, 'withdraw': True})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.as_user(0)
+        self.assertEqual(self.client.post(f'/api/dialect/contributions/{cid}/consent', json={'consent': CONSENT}).status_code, 409)
+
     def test_owner_cannot_curate_own_item(self):
         self.as_user(3)
         item = self.contribute("own-curate")
@@ -162,11 +194,33 @@ class WorkspaceTest(unittest.TestCase):
         r = self.client.post("/api/dialect/releases", json={"ids": [item["id"]], "splits": {str(item["id"]): "dev"}, "data_card": "Thử nghiệm"})
         self.assertEqual(r.status_code, 201, r.text)
         listed = self.client.get("/api/dialect/releases").json()[0]
-        self.assertEqual(listed["splits"], {str(item["id"]): "dev"})
+        self.assertEqual(listed["splits"], {str(item["id"]): "train"})  # Client split is ignored.
         self.assertTrue(listed["curated"])
         download = self.client.get(f"/api/dialect/releases/{r.json()['id']}").json()
         self.assertEqual(download["records"][0]["curated"]["text"], "mô")
-        self.assertEqual(download["manifest"]["data_card"], "Thử nghiệm")
+        from app.services.dataset_release import RULE_VERSION
+        self.assertIn(RULE_VERSION, download["manifest"]["data_card"])
+        from app.services.dataset_package import verify_package
+        self.assertEqual(verify_package(download)['records'], 1)
+
+    def test_curation_validates_without_truncation_or_mutating_raw(self):
+        from copy import deepcopy
+        import unicodedata
+        item = self.contribute('curation-integrity')
+        original = deepcopy(item['raw'])
+        self.make_eligible(item['id'], item['source_id'])
+        raw = {'text': unicodedata.normalize('NFD', ' mô '), 'meaning': 'đâu', 'standard': 'đâu', 'context': 'Đi mô?'}
+        valid = self.client.post(f"/api/dialect/reviews/{item['id']}/curate", json={'raw': raw})
+        self.assertEqual(valid.status_code, 200, valid.text)
+        self.assertEqual(valid.json()['meta']['curated']['text'], 'mô')
+        self.assertEqual(valid.json()['raw'], original)
+        for field, value in [('meaning', ''), ('text', 'a' * 5001), ('text', 'mô\u200b'), ('standard', 42)]:
+            response = self.client.post(f"/api/dialect/reviews/{item['id']}/curate", json={'raw': {**raw, field: value}})
+            self.assertEqual(response.status_code, 422, response.text)
+        from app.models.dialect import DialectContributionMeta
+        self.assertEqual(self.db.get(DialectContributionMeta, item['id']).curated['text'], 'mô')
+        short = self.client.post(f"/api/dialect/reviews/{item['id']}/curate", json={'raw': {**raw, 'text': 'á'}})
+        self.assertEqual(short.status_code, 200, short.text)
 
     def test_credit_rules(self):
         item = self.contribute("credit-1")
@@ -194,12 +248,12 @@ class WorkspaceTest(unittest.TestCase):
         self.as_user(3)
         r = self.client.put(f"/api/dialect/participants/{self.users[1].id}", json={"review_region": "Đà Nẵng", "risk": "hold"})
         self.assertEqual(r.json()["review_region"], "Đà Nẵng")
-        self.assertEqual(self.client.put(f"/api/dialect/participants/{self.users[3].id}", json={"role": "reviewer"}).status_code, 409)
-        # A reviewer limited to another region cannot vote here.
+        self.assertEqual(self.client.put(f"/api/dialect/participants/{self.users[3].id}", json={"role": "reviewer"}).status_code, 200)
+        # Reviewers now share management rights across regions.
         self.as_user(0)
         item = self.contribute("region-1")
         self.as_user(1)
-        self.assertEqual(self.client.post(f"/api/dialect/reviews/{item['id']}/votes", json=VOTE).status_code, 403)
+        self.assertEqual(self.client.post(f"/api/dialect/reviews/{item['id']}/votes", json=VOTE).status_code, 200)
         self.as_user(4)
         self.assertEqual(self.client.post("/api/dialect/me/appeal", json={"text": "Xin rà soát lại"}).json()["appeal"], "Xin rà soát lại")
 

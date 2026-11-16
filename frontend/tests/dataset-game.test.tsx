@@ -22,7 +22,7 @@ describe("dataset question pack", () => {
     fireEvent.click(screen.getByLabelText(/Tiếp nhận & kiểm duyệt/));
     fireEvent.click(screen.getByLabelText(/Cho phép sử dụng dữ liệu để huấn luyện/));
     fireEvent.click(screen.getByRole("button", { name: "Bắt đầu chơi" }));
-    await screen.findByRole("heading", { name: "Q01 / 10" });
+    await screen.findByRole("heading", { name: "Câu 1 / 10" });
     const original = (await repository().load()).sessions[0];
     expect(original.exam.id).not.toBe("exam-demo");
     // Return through the public entry without triggering the intentional leave-game dialog.
@@ -30,7 +30,7 @@ describe("dataset question pack", () => {
     const returnRouter = createMemoryRouter([demoRoute], { initialEntries: ["/demo/play"] });
     render(<RouterProvider router={returnRouter} />);
     fireEvent.click(await screen.findByRole("button", { name: "Tiếp tục chơi" }));
-    await screen.findByRole("heading", { name: "Q01 / 10" });
+    await screen.findByRole("heading", { name: "Câu 1 / 10" });
     expect(returnRouter.state.location.pathname).toBe(`/demo/game/${original.id}`);
     expect((await repository().load()).sessions).toHaveLength(1);
   });
@@ -104,7 +104,7 @@ describe("dataset question pack", () => {
     fireEvent.click(screen.getByLabelText(/Cho phép sử dụng dữ liệu để huấn luyện/));
     fireEvent.click(screen.getByRole("button", { name: "Bắt đầu chơi" }));
     for (let i = 0; i < 10; i++) {
-      await screen.findByRole("heading", { name: `Q${String(i + 1).padStart(2, "0")} / 10` });
+      await screen.findByRole("heading", { name: `Câu ${i + 1} / 10` });
       const session = (await repository().load()).sessions.at(-1)!; const q = session.questions[i];
       if (q.format === "choice") fireEvent.click(screen.getByRole("radio", { name: q.options!.find((o) => o.id === q.correctOptionId)!.text }));
       else {
@@ -112,7 +112,7 @@ describe("dataset question pack", () => {
         if (standardAnswer) expect(screen.queryByLabelText("Đáp án của bạn")).not.toBeInTheDocument();
         fireEvent.change(screen.getByLabelText("Cách nói phổ thông *"), { target: { value: q.accepted[0] ?? "Câu trả lời tự nhiên của tôi" } });
       }
-      if (i >= 8) for (const label of ["Nghĩa bạn muốn giải thích *", "Cách nói phổ thông *", "Ví dụ / ngữ cảnh *"]) fireEvent.change(screen.getByLabelText(label), { target: { value: "Nội dung góp mới" } });
+      if (i >= 8) for (const label of ["Cách nói địa phương *", "Giải thích *", "Cách nói phổ thông *"]) fireEvent.change(screen.getByLabelText(label), { target: { value: "Nội dung góp mới" } });
       await waitFor(() => expect(screen.getByRole("button", { name: "Lưu & tiếp tục" })).toBeEnabled());
       fireEvent.click(screen.getByRole("button", { name: "Lưu & tiếp tục" }));
     }

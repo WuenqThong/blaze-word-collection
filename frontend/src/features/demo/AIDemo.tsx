@@ -1,3 +1,5 @@
+import { ResponsiveTable } from "../../components/ResponsiveTable";
+import { displayLabel, systemText } from "../../lib/display";
 import { useState } from "react";
 import { useDemo } from "./context";
 import { normalize, uid } from "./domain";
@@ -23,10 +25,10 @@ export function AIDemo() {
   }
   return (
     <>
-      <Heading title="AI & pipeline · mô phỏng có nhãn">
+      <Heading title="AI & quy trình xử lý · mô phỏng có nhãn">
         <p>
-          Chưa tích hợp nhà cung cấp, tải model hoặc huấn luyện. Kết quả bên
-          dưới do bộ quy tắc demo và dữ liệu bạn nhập, không phải chất lượng AI
+          Chưa tích hợp nhà cung cấp, tải mô hình hoặc huấn luyện. Kết quả bên
+          dưới do bộ quy tắc minh họa và dữ liệu bạn nhập, không phải chất lượng AI
           thật.
         </p>
       </Heading>
@@ -39,7 +41,7 @@ export function AIDemo() {
             >
               {state.models.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.name} · v{m.version}
+                  {m.name} · phiên bản {m.version}
                 </option>
               ))}
             </select>
@@ -52,7 +54,7 @@ export function AIDemo() {
           </Field>
           <div className="demo-actions">
             <Action disabled={!input.trim()} onClick={translate}>
-              Chạy kịch bản demo (không gọi AI)
+              Chạy kịch bản minh họa (không gọi AI)
             </Action>
             <Action
               disabled={!input.trim() || actor.role === "guest"}
@@ -66,9 +68,9 @@ export function AIDemo() {
           </div>
           {result && (
             <div className="demo-result">
-              <strong>Kết quả QUY TẮC DEMO</strong>
+              <strong>Kết quả QUY TẮC Minh họa</strong>
               <p>{result}</p>
-              <small>Version {model?.id} · không tự VERIFIED.</small>
+              <small>Phiên bản {model?.id} · không tự Đã duyệt đạt.</small>
             </div>
           )}
           <Field label="Góp lỗi dịch / bản phổ thông bạn đề xuất">
@@ -102,8 +104,8 @@ export function AIDemo() {
                   text: input,
                   meaning: feedback,
                   standard: feedback,
-                  context: "Phản hồi từ màn hình dịch DEMO",
-                  evidence: `Quy tắc demo ${model?.id}`,
+                  context: "Phản hồi từ màn hình dịch Minh họa",
+                  evidence: `Quy tắc minh họa ${model?.id}`,
                   method: "model-feedback",
                 },
                 consent: {
@@ -117,15 +119,15 @@ export function AIDemo() {
               })
             }
           >
-            Lưu bản sửa thành RAW chờ reviewer
+            Lưu bản sửa thành Bản gốc chờ người duyệt
           </Action>
         </Panel>
-        <Panel title="ASR / gợi ý transcript và trùng">
+        <Panel title="Nhận dạng giọng nói / gợi ý bản chép lời và trùng">
           <p>
-            Kịch bản minh họa: chọn audio và nhập transcript dự kiến; nút gợi ý
+            Kịch bản minh họa: chọn âm thanh và nhập bản chép lời dự kiến; nút gợi ý
             chỉ chuẩn hóa văn bản này, không phân tích âm thanh.
           </p>
-          <Field label="Audio có quyền trong demo">
+          <Field label="Âm thanh có quyền trong minh họa">
             <select
               value={mediaId}
               onChange={(e) => {
@@ -136,7 +138,7 @@ export function AIDemo() {
                 );
               }}
             >
-              <option value="">Chọn audio / dùng văn bản minh họa</option>
+              <option value="">Chọn âm thanh / dùng văn bản minh họa</option>
               {state.media
                 .filter((m) => m.kind === "audio")
                 .map((m) => (
@@ -146,7 +148,7 @@ export function AIDemo() {
                 ))}
             </select>
           </Field>
-          <Field label="Transcript dự kiến để thử kịch bản">
+          <Field label="Bản chép lời dự kiến để thử kịch bản">
             <textarea
               value={transcript}
               onChange={(e) => setTranscript(e.target.value)}
@@ -158,7 +160,7 @@ export function AIDemo() {
               setTranscript(transcript.trim().replace(/\s+/g, " "))
             }
           >
-            Gợi ý chuẩn hóa transcript · DEMO
+            Gợi ý chuẩn hóa bản chép lời · Minh họa
           </Action>
           <p>
             Gợi ý trùng theo cách viết:{" "}
@@ -178,7 +180,7 @@ export function AIDemo() {
                 return run({ type: "media", media: { ...m, transcript } });
               }}
             >
-              Lưu transcript để reviewer QA
+              Lưu bản chép lời để người duyệt Kiểm tra chất lượng
             </Action>
           )}
           <Action
@@ -187,24 +189,24 @@ export function AIDemo() {
               run({
                 type: "feedback",
                 entity: `asr:${mediaId || "text-demo"}`,
-                text: `Transcript gợi ý DEMO, cần reviewer: ${transcript}`,
+                text: `Bản chép lời gợi ý Minh họa, cần người duyệt: ${transcript}`,
               })
             }
           >
-            Chuyển gợi ý cho reviewer
+            Chuyển gợi ý cho người duyệt
           </Action>
         </Panel>
       </div>
-      <Panel title="Benchmark minh họa · trước/sau bổ sung">
+      <Panel title="Đánh giá đối chiếu minh họa · trước/sau bổ sung">
         <p>
-          Bốn ca tự soạn bên dưới chỉ kiểm thử kịch bản frontend. Không phải
-          gold bank hoặc benchmark AI nghiên cứu.
+          Bốn ca tự soạn bên dưới chỉ kiểm thử kịch bản giao diện. Không phải
+          kiểm tra đối chiếu bank hoặc đánh giá đối chiếu AI nghiên cứu.
         </p>
-        <div className="demo-table-scroll">
+        <ResponsiveTable>
           <table>
             <thead>
               <tr>
-                <th>Version</th>
+                <th>Phiên bản</th>
                 <th>Đúng / tổng</th>
                 <th>Kết quả từng ca</th>
               </tr>
@@ -243,7 +245,7 @@ export function AIDemo() {
               })}
             </tbody>
           </table>
-        </div>
+        </ResponsiveTable>
         <Action
           onClick={() =>
             download(
@@ -259,10 +261,10 @@ export function AIDemo() {
             )
           }
         >
-          Tải kết quả đối chiếu demo
+          Tải kết quả đối chiếu minh họa
         </Action>
       </Panel>
-      {actor.role === "admin" && (
+      {["admin", "reviewer"].includes(actor.role) && (
         <>
           <Panel title="Đăng ký phiên bản mô phỏng">
             <Field label="Tên / mô tả phiên bản">
@@ -295,7 +297,7 @@ export function AIDemo() {
                       Math.max(0, ...state.models.map((m) => m.version)) + 1,
                     rules: Object.fromEntries(entries),
                     notes:
-                      "Phiên bản QUY TẮC DEMO, không phải model huấn luyện.",
+                      "Phiên bản QUY TẮC Minh họa, không phải mô hình huấn luyện.",
                     active: true,
                   },
                 });
@@ -303,15 +305,15 @@ export function AIDemo() {
                 setNote("");
               }}
             >
-              Lưu version mới
+              Lưu phiên bản mới
             </Action>
           </Panel>
-          <Panel title="Pipeline training / evaluation · kịch bản trạng thái">
-            <Field label="Tên cấu hình job">
+          <Panel title="Quy trình xử lý huấn luyện / đánh giá · kịch bản trạng thái">
+            <Field label="Tên cấu hình tác vụ">
               <input
                 value={jobModel}
                 onChange={(e) => setJobModel(e.target.value)}
-                placeholder="DEMO thử nghiệm trước/sau"
+                placeholder="Minh họa thử nghiệm trước/sau"
               />
             </Field>
             <div className="demo-actions">
@@ -328,13 +330,13 @@ export function AIDemo() {
                         model: jobModel,
                         status: "queued",
                         progress: 0,
-                        log: ["Job DEMO: chưa gọi GPU/API hoặc train thật."],
+                        log: ["Tác vụ Minh họa: chưa gọi GPU/API hoặc huấn luyện thật."],
                         at: new Date().toISOString(),
                       },
                     })
                   }
                 >
-                  Tạo job {type}
+                  Tạo tác vụ {displayLabel(type)}
                 </Action>
               ))}
             </div>
@@ -343,14 +345,14 @@ export function AIDemo() {
               .map((j) => (
                 <div className="demo-contribution" key={j.id}>
                   <h3>
-                    {j.model} · {j.type} · {j.status}
+                    {j.model} · {displayLabel(j.type)} · {displayLabel(j.status)}
                   </h3>
                   <progress
                     max={100}
                     value={j.progress}
-                    aria-label={`Tiến độ job ${j.id}`}
+                    aria-label={`Tiến độ tác vụ ${j.id}`}
                   />
-                  <p>{j.log.join(" / ")}</p>
+                  <p>{j.log.map(line => systemText(line)).join(" / ")}</p>
                   <div className="demo-actions">
                     <Action
                       disabled={j.status !== "queued"}
@@ -363,7 +365,7 @@ export function AIDemo() {
                             progress: 35,
                             log: [
                               ...j.log,
-                              "Chuyển running theo thao tác demo.",
+                              "Chuyển đang chạy theo thao tác minh họa.",
                             ],
                           },
                         })
@@ -382,7 +384,7 @@ export function AIDemo() {
                             progress: 100,
                             log: [
                               ...j.log,
-                              "Hoàn tất kịch bản UI. Không tạo model thật.",
+                              "Hoàn tất kịch bản Giao diện. Không tạo mô hình thật.",
                             ],
                           },
                         })
@@ -433,7 +435,7 @@ export function AIDemo() {
                             ...j,
                             status: "queued",
                             progress: 0,
-                            log: [...j.log, "Thử lại job demo."],
+                            log: [...j.log, "Thử lại tác vụ minh họa."],
                           },
                         })
                       }

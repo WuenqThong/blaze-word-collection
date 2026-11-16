@@ -59,7 +59,7 @@
 }
 
 .rp-phone-screen {
-  background: linear-gradient(180deg, #1e3a5f 0%, #2a5599 50%, #1e3a5f 100%);
+  background: linear-gradient(180deg, #633900 0%, #a15c00 50%, #633900 100%);
   border-radius: 32px;
   height: 100%;
   display: flex;
@@ -210,7 +210,7 @@
 }
 .rp-btn-end i { transform: rotate(-135deg); }
 .rp-btn-end:hover { transform: rotate(135deg) scale(1.05); }
-.rp-btn-restart { background: #3b82f6; }
+.rp-btn-restart { background: #a15c00; }
 
 /* Report overlay */
 .rp-report-overlay {
@@ -264,8 +264,8 @@
 
 /* Test case banner — đặt ngang trên cùng stage */
 .rp-test-case-banner {
-  background: #dbeafe;
-  border-left: 4px solid #3b82f6;
+  background: #fff4d6;
+  border-left: 4px solid #a15c00;
   border-radius: 8px;
   padding: 12px 18px;
   font-size: 0.9rem;
@@ -293,7 +293,7 @@
 .rp-side-tabs {
   display: flex;
   gap: 4px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid #f9f8f5;
   margin-bottom: 12px;
 }
 .rp-side-tab {
@@ -301,18 +301,18 @@
   border: none;
   padding: 8px 14px;
   font-size: 0.875rem;
-  color: #6b7280;
+  color: #6b6560;
   cursor: pointer;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   transition: color 0.1s, border-color 0.1s;
 }
 .rp-side-tab:hover {
-  color: #1f2937;
+  color: #633900;
 }
 .rp-side-tab.active {
-  color: #1d4ed8;
-  border-bottom-color: #1d4ed8;
+  color: #804900;
+  border-bottom-color: #804900;
   font-weight: 500;
 }
 .rp-side-content {
@@ -322,14 +322,14 @@
 /* Live note panel — annotator ghi note trong khi đang call */
 .rp-live-note {
   background: #fff;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #f9f8f5;
   border-radius: 8px;
   padding: 12px;
   margin-top: 12px;
 }
 .rp-live-note h6 {
   font-size: 0.9rem;
-  color: #1f2937;
+  color: #633900;
 }
 .rp-live-note textarea {
   font-size: 0.875rem;
@@ -353,7 +353,7 @@
   white-space: pre-wrap;
   word-break: break-word;
   margin: 0;
-  color: #1f2937;
+  color: #633900;
 }
 
 /* Full-bleed: break out of parent container padding/max-width */
@@ -385,7 +385,7 @@
   align-items: center;
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(8px);
-  border: 1px solid #e5e7eb;
+  border: 1px solid #f9f8f5;
   border-radius: 999px;
   padding: 4px 6px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
@@ -397,13 +397,13 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  color: #6b7280;
+  color: #6b6560;
   text-decoration: none;
   transition: background 0.1s, color 0.1s;
 }
 .rp-floating-back:hover {
   background: #f3f4f6;
-  color: #1f2937;
+  color: #633900;
 }
 
 /* Back button */
@@ -421,8 +421,8 @@
   align-items: flex-start;
   gap: 16px;
   padding: 18px 20px;
-  background: linear-gradient(135deg, #eff6ff 0%, #f9fafb 100%);
-  border: 1px solid #e0e7ff;
+  background: linear-gradient(135deg, #fffaf0 0%, #f9fafb 100%);
+  border: 1px solid #fff4d6;
   border-radius: 12px;
   margin-bottom: 16px;
 }
@@ -443,21 +443,21 @@
   padding: 3px 10px;
   border-radius: 12px;
   background: #ffffff;
-  border: 1px solid #e5e7eb;
-  color: #374151;
+  border: 1px solid #f9f8f5;
+  color: #633900;
   font-weight: 500;
   font-family: inherit;
 }
 .rp-meta-pill code,
 code.rp-meta-pill {
   background: #ffffff;
-  color: #6366f1;
+  color: #e7a103;
   font-family: ui-monospace, SFMono-Regular, monospace;
   font-size: 0.72rem;
 }
 .rp-meta-lang {
   background: #f3f4f6;
-  color: #6b7280;
+  color: #6b6560;
   font-weight: 600;
   letter-spacing: 0.5px;
 }
@@ -468,8 +468,8 @@ code.rp-meta-pill {
 }
 .rp-meta-off {
   background: #f3f4f6;
-  border-color: #d1d5db;
-  color: #6b7280;
+  border-color: #ece7de;
+  color: #6b6560;
 }
 
 /* Collapsible instructions */
@@ -500,7 +500,7 @@ code.rp-meta-pill {
   font-family: inherit;
   font-size: 0.85rem;
   white-space: pre-wrap;
-  color: #1f2937;
+  color: #633900;
   background: #fffbeb;
 }
 
@@ -530,7 +530,7 @@ code.rp-meta-pill {
 .rp-tc-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
-  border-color: #6366f1;
+  border-color: #e7a103;
 }
 .rp-tc-desc {
   display: -webkit-box;
@@ -546,8 +546,8 @@ code.rp-meta-pill {
   padding: 2px 8px;
   border-radius: 8px;
   background: #f3f4f6;
-  color: #9ca3af;
-  border: 1px solid #e5e7eb;
+  color: #9e978f;
+  border: 1px solid #f9f8f5;
 }
 .rp-tc-tag.filled {
   background: #ecfdf5;
@@ -568,7 +568,7 @@ code.rp-meta-pill {
 .rp-scenario-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
-  border-color: var(--brand-500, #3b82f6);
+  border-color: var(--brand-500, #a15c00);
 }
 
 /* Import modal (overlay) */
@@ -595,7 +595,7 @@ code.rp-meta-pill {
 }
 .rp-import-header {
   padding: 14px 18px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid #f9f8f5;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -607,14 +607,14 @@ code.rp-meta-pill {
 }
 .rp-import-footer {
   padding: 12px 18px;
-  border-top: 1px solid #e5e7eb;
+  border-top: 1px solid #f9f8f5;
   display: flex;
   justify-content: flex-end;
   gap: 8px;
 }
 
 .rp-uc-card {
-  border: 1px solid var(--surface-3, #e5e7eb);
+  border: 1px solid var(--surface-3, #f9f8f5);
   border-radius: 8px;
   padding: 12px;
   margin-bottom: 8px;
@@ -623,7 +623,7 @@ code.rp-meta-pill {
 }
 .rp-uc-card:hover { background: #f9fafb; }
 .rp-uc-card.imported { background: #f0fdf4; border-color: #86efac; cursor: default; }
-.rp-uc-card.selected { background: #eff6ff; border-color: #60a5fa; }
+.rp-uc-card.selected { background: #fffaf0; border-color: #dfb85d; }
 
 /* Star rating */
 .rp-stars {
@@ -634,7 +634,7 @@ code.rp-meta-pill {
   background: none;
   border: none;
   font-size: 1.6rem;
-  color: #d1d5db;
+  color: #ece7de;
   cursor: pointer;
   padding: 0;
   transition: color 0.1s, transform 0.1s;

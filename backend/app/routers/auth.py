@@ -1,4 +1,8 @@
 from fastapi import APIRouter, Depends, Response, status
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+from app.core.database import get_db
+from app.services.account_recovery import consume_recovery
 
 from app.core.config import get_settings
 from app.models import User
@@ -63,3 +67,14 @@ def change_password(
     auth.change_password(user, payload.current_password, payload.new_password)
     _set_auth_cookie(response, user)
     return None
+
+
+class ResetPasswordInput(BaseModel):
+    token: str = Field(min_length=32, max_length=256)
+    new_password: str = Field(min_length=6, max_length=128)
+
+
+@router.post('/reset-password', status_code=204)
+def reset_password(body: ResetPasswordInput, response: Response, db: Session = Depends(get_db)):
+    consume_recovery(db, body.token, body.new_password)
+    response.delete_cookie(settings.cookie_name, path='/')

@@ -10,9 +10,9 @@ import random
 from datetime import timedelta
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -22,6 +22,7 @@ from app.models.dialect import DialectContributionMeta as M
 from app.models.dialect import DialectCredit as K
 from app.models.dialect import DialectFeedback as F
 from app.models.dialect import DialectGameAllocation as GA
+from app.models.dialect import DialectGameReceipt as GR
 from app.models.dialect import DialectParticipant as DP
 from app.models.dialect import DialectProfile as P
 from app.models.dialect import DialectRelease as R
@@ -33,6 +34,17 @@ from app.routers.dialect import (ACCEPTED_CONSENT_VERSIONS, active, admin, conse
                                  meta_of, normal, pack, release_meta, reviewer)
 
 router = APIRouter(prefix="/dialect", tags=["dialect-workspace"])
+
+
+@router.get('/audit')
+def audit_events(offset: int = 0, limit: int = 50, db: Session = Depends(get_db), user: User = Depends(admin)):
+    from app.models.security import SecurityAuditEvent
+    query = db.query(SecurityAuditEvent)
+    return {'total': query.count(), 'items': [
+        {'id': row.id, 'actor_id': row.actor_id, 'action': row.action, 'entity_type': row.entity_type,
+         'entity_id': row.entity_id, 'request_id': row.request_id, 'details': row.details, 'created_at': row.created_at}
+        for row in query.order_by(SecurityAuditEvent.id.desc()).offset(max(0, offset)).limit(max(1, min(limit, 100)))
+    ]}
 
 CREDIT_AMOUNT = 5
 CREDIT_DAYS = 30
@@ -54,10 +66,11 @@ def participant(db, uid, create=False):
 
 
 def person(db, u: User):
+    from app.core.roles import canonical_role
     flags = db.get(DP, u.id)
     profile = db.get(P, u.id)
     region = (flags.review_region if flags else "") or (profile.usage_area if profile else "") or (profile.upbringing_area if profile else "")
-    return {"id": u.id, "full_name": u.full_name, "role": u.role, "account_status": u.account_status, "region": region,
+    return {"id": u.id, "full_name": u.full_name, "role": canonical_role(u.role), "account_status": u.account_status, "region": region,
             "verified": bool(flags and flags.verified), "risk": flags.risk if flags else "clear",
             "review_region": flags.review_region if flags else "", "appeal": flags.appeal if flags else ""}
 
@@ -78,38 +91,33 @@ def feedback_row(f: F):
 
 
 @router.get("/workspace")
-def workspace(db: Session = Depends(get_db), user: User = Depends(active)):
-    """Everything the caller may see, in the shape the demo screens consume."""
-    staff = user.role in ("admin", "reviewer")
-    q = db.query(C)
-    if not staff:
-        q = q.filter(C.owner_id == user.id)
-    items = q.order_by(C.id.desc()).limit(WORKSPACE_LIMIT).all()
-    contributions = [pack(c, db, user, adjudication=user.role == "admin") for c in items]
-
-    if user.role == "admin":
-        sources = db.query(S).order_by(S.id.desc()).limit(WORKSPACE_LIMIT).all()
-        people = db.query(User).order_by(User.id).all()
-        credits = db.query(K).order_by(K.id.desc()).all()
-        releases = [{"id": r.id, "created_at": r.created_at, "count": len(r.records), "checksum": r.checksum, **release_meta(db, r)}
-                    for r in db.query(R).order_by(R.id.desc()).limit(100)]
-    else:
-        source_ids = {c.source_id for c in items}
-        sources = db.query(S).filter(S.id.in_(source_ids)).all() if source_ids else []
-        people = [user]
-        credits = db.query(K).filter_by(user_id=user.id).order_by(K.id.desc()).all()
-        releases = []
-    feedback = db.query(F) if staff else db.query(F).filter_by(user_id=user.id)
+def workspace(cursor: str | None = Query(default=None, max_length=4096), limit: int = Query(default=100, ge=1, le=200), db: Session = Depends(get_db), user: User = Depends(active)):
+    import os
+    import hashlib
+    from app.core.config import get_settings
+    settings = get_settings()
+    from app.services.workspace_queries import page_collections, statistics
+    pages, next_cursor = page_collections(db, user, cursor, limit)
     return {
+        "environment": {"label": "Kiểm thử QA" if os.getenv('BLAZE_QA_ROOT') else {"development": "Phát triển local", "test": "Kiểm thử", "production": "Chính thức"}[settings.environment], "id": hashlib.sha256(str(db.get_bind().url).encode()).hexdigest()[:10]},
         "me": person(db, user),
-        "contributions": contributions,
-        "sources": [source_row(db, s) for s in sources],
-        "people": [person(db, u) for u in people],
-        "releases": releases,
-        "credits": [credit_row(k) for k in credits],
-        "feedback": [feedback_row(f) for f in feedback.order_by(F.id.desc()).limit(WORKSPACE_LIMIT)],
+        "contributions": [pack(c, db, user, adjudication=user.role in ('admin', 'reviewer')) for c in pages['contributions']],
+        "sources": [source_row(db, s) for s in pages['sources']],
+        "people": [person(db, u) for u in pages['people']],
+        "releases": [{"id": r.id, "created_at": r.created_at, "count": len(r.records), "checksum": r.checksum, **release_meta(db, r)} for r in pages['releases']],
+        "credits": [credit_row(k) for k in pages['credits']],
+        "feedback": [feedback_row(f) for f in pages['feedback']],
         "reward_enabled": bool(setting(db, "reward_enabled", False)),
+        "game_api": 1,
+        "next_cursor": next_cursor,
+        "stats": statistics(db, user) if cursor is None else None,
     }
+
+
+@router.get('/statistics')
+def server_statistics(db: Session = Depends(get_db), user: User = Depends(active)):
+    from app.services.workspace_queries import statistics
+    return statistics(db, user)
 
 
 # --- Contribution lifecycle ------------------------------------------------
@@ -130,12 +138,18 @@ class ConsentInput(BaseModel):
 @router.post("/contributions/{cid}/consent")
 def change_consent(cid: int, body: ConsentInput, db: Session = Depends(get_db), user: User = Depends(active)):
     item = find(db, cid)
-    if item.owner_id != user.id and user.role != "admin":
+    if item.owner_id != user.id and user.role not in ('admin', 'reviewer'):
         raise HTTPException(403, "Không có quyền quản lý mẫu này")
     if item.withdrawn_at and not body.withdraw:
         raise HTTPException(409, "Mẫu đã rút không thể khôi phục; hãy gửi bản mới")
-    meta = meta_of(db, cid, create=True)
+    meta = meta_of(db, cid)
     previous = consent_of(item, meta)
+    if item.owner_id != user.id:
+        if (body.consent.version != previous.get('version') or
+                any(getattr(body.consent, key) and not previous.get(key, False)
+                    for key in ('collect', 'train', 'public', 'audio'))):
+            raise HTTPException(403, "Chỉ người góp được mở rộng quyền sử dụng mẫu")
+    meta = meta_of(db, cid, create=True)
     meta.consent = body.consent.model_dump()
     if meta.consent != previous:
         event(db, item, user, "CONSENT_UPDATED", ", ".join(f"{k}={'có' if v else 'không'}" for k, v in meta.consent.items() if k != "version"))
@@ -148,6 +162,15 @@ def change_consent(cid: int, body: ConsentInput, db: Session = Depends(get_db), 
 
 @router.post("/sessions/{ref}/withdraw")
 def withdraw_session(ref: str, db: Session = Depends(get_db), user: User = Depends(active)):
+    count = withdraw_session_data(db, ref, user)
+    db.commit()
+    return {"withdrawn": count}
+
+
+def withdraw_session_data(db, ref, user):
+    allocation = db.get(GA, ref)
+    if allocation and allocation.user_id != user.id:
+        raise HTTPException(403, 'Lượt chơi thuộc tài khoản khác')
     ids = [cid for (cid,) in db.query(M.contribution_id).filter(M.session_ref == ref).all()]
     items = db.query(C).filter(C.id.in_(ids), C.owner_id == user.id).all() if ids else []
     for item in items:
@@ -157,8 +180,15 @@ def withdraw_session(ref: str, db: Session = Depends(get_db), user: User = Depen
     allocation = db.get(GA, ref)
     if allocation and allocation.user_id == user.id and not allocation.withdrawn_at:
         allocation.withdrawn_at = utcnow()
-    db.commit()
-    return {"withdrawn": len(items)}
+    receipt = db.get(GR, ref)
+    if receipt and receipt.user_id == user.id and not receipt.withdrawn_at:
+        receipt.withdrawn_at = utcnow()
+    from app.models.game import GameSession
+    play = db.get(GameSession, ref)
+    if play and play.user_id == user.id and play.data['state'] != 'withdrawn':
+        play.data = {**play.data, 'state': 'withdrawn'}
+        play.revision += 1
+    return len(items)
 
 
 
@@ -209,6 +239,43 @@ def allocate(body: AllocationInput, db: Session = Depends(get_db), user: User = 
     return allocation_row(row, low, not unplayed)
 
 
+@router.post('/sessions/{ref}/started')
+def acknowledge_start(ref: str, db: Session = Depends(get_db), user: User = Depends(active)):
+    allocation = db.get(GA, ref)
+    if allocation is None or allocation.user_id != user.id:
+        raise HTTPException(404, 'Không tìm thấy lượt được cấp cho tài khoản này')
+    if allocation.withdrawn_at:
+        raise HTTPException(409, 'Lượt đã rút không thể bắt đầu lại')
+    receipt = db.get(GR, ref)
+    if receipt is None:
+        db.add(GR(session_ref=ref, user_id=user.id, started_at=utcnow()))
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            receipt = db.get(GR, ref)
+            if receipt is None or receipt.user_id != user.id:
+                raise HTTPException(409, 'Xung đột xác nhận lượt')
+    return {'session_ref': ref, 'started': True}
+
+
+@router.post('/sessions/{ref}/submitted')
+def acknowledge_submission(ref: str, db: Session = Depends(get_db), user: User = Depends(active)):
+    from app.models.game import GameSession
+    play = db.get(GameSession, ref)
+    if play and play.data['state'] != 'submitted':
+        raise HTTPException(409, 'Lượt chưa được gửi và kiểm tra trên máy chủ')
+    receipt = db.get(GR, ref)
+    if receipt is None or receipt.user_id != user.id:
+        raise HTTPException(409, 'Cần đồng bộ xác nhận bắt đầu lượt trước khi xác nhận gửi bài')
+    if receipt.withdrawn_at:
+        raise HTTPException(409, 'Lượt đã rút không thể gửi lại')
+    if receipt.submitted_at is None:
+        receipt.submitted_at = utcnow()
+        db.commit()
+    return {'session_ref': ref, 'submitted': True}
+
+
 class CurateInput(BaseModel):
     raw: dict
     sense_id: str = Field(default="", max_length=128)
@@ -218,13 +285,16 @@ class CurateInput(BaseModel):
 @router.post("/reviews/{cid}/curate")
 def curate(cid: int, body: CurateInput, db: Session = Depends(get_db), user: User = Depends(reviewer)):
     item = find(db, cid)
+    from app.routers.dialect_review_ops import enforce_region
+    enforce_region(db, user, item)
     if item.owner_id == user.id:
         raise HTTPException(403, "Không được tự chuẩn hóa mẫu của mình")
     if item.status != "VERIFIED" or item.withdrawn_at:
         raise HTTPException(409, "Chỉ chuẩn hóa mẫu đã xác minh và chưa rút")
-    curated = {k: str(body.raw.get(k, ""))[:5000] for k in ("kind", "text", "meaning", "standard", "context", "variants", "region", "topic", "partOfSpeech", "keywords")}
+    from app.services.curation import normalize_curated
+    curated = normalize_curated(body.raw)
     meta = meta_of(db, cid, create=True)
-    meta.curated, meta.sense_id, meta.qa_audio = curated, body.sense_id or str(cid), body.qa_audio
+    meta.curated, meta.sense_id, meta.qa_audio = curated, body.sense_id.strip() or str(cid), body.qa_audio
     meta.curated_by, meta.curated_at = user.id, utcnow()
     event(db, item, user, "CURATED", "Lưu bản chuẩn hóa; RAW giữ nguyên")
     db.commit()
@@ -345,6 +415,7 @@ def spend_credit(body: SpendInput, db: Session = Depends(get_db), user: User = D
 # --- Participants ---------------------------------------------------------
 
 class ParticipantInput(BaseModel):
+    expected: dict | None = None
     role: Literal["annotator", "reviewer"] | None = None
     verified: bool | None = None
     risk: Literal["clear", "hold"] | None = None
@@ -353,14 +424,25 @@ class ParticipantInput(BaseModel):
 
 @router.put("/participants/{uid}")
 def update_participant(uid: int, body: ParticipantInput, db: Session = Depends(get_db), user: User = Depends(admin)):
+    if body.role is not None:
+        if db.get_bind().dialect.name == 'sqlite':
+            db.execute(text('BEGIN IMMEDIATE'))
+        else:
+            db.query(User).filter(User.role.in_(('admin', 'reviewer'))).with_for_update().all()
     target = db.get(User, uid)
     if not target:
         raise HTTPException(404, "Không tìm thấy tài khoản")
-    if body.role is not None and body.role != target.role:
-        if target.role == "admin":
-            raise HTTPException(409, "Không thay quyền quản trị tại màn hình này")
-        target.role = body.role
     flags = participant(db, uid, create=True)
+    from app.core.roles import canonical_role
+    current = {'role': canonical_role(target.role), 'verified': bool(flags.verified), 'risk': flags.risk or 'clear', 'review_region': flags.review_region or ''}
+    if body.expected and 'role' in body.expected:
+        body.expected['role'] = canonical_role(body.expected['role'])
+    if body.expected and any(key not in current or current[key] != value for key, value in body.expected.items()):
+        raise HTTPException(409, 'Quyền hoặc phân công đã thay đổi. Tải lại rồi kiểm tra trước khi lưu.')
+    if body.role is not None and body.role != target.role:
+        if target.role in ('admin', 'reviewer') and body.role == 'annotator' and db.query(User).filter(User.role.in_(('admin', 'reviewer')), User.account_status == 'active').count() <= 1:
+            raise HTTPException(409, "Cần giữ ít nhất một Reviewer")
+        target.role = body.role
     if body.verified is not None:
         flags.verified = body.verified
     if body.risk is not None:

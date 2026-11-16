@@ -57,7 +57,7 @@ class AllocationService:
             self.db.commit()
 
     def _assert_can_access(self, project: Project, user: User) -> None:
-        if user.role == "admin":
+        if user.role in ('admin', 'reviewer'):
             return
         if project.visibility == "public":
             return
@@ -176,7 +176,7 @@ class AllocationService:
                 self.db.commit()
 
         # 2. Lấy danh sách project user có quyền + đang active
-        if user.role == "admin":
+        if user.role in ('admin', 'reviewer'):
             accessible_projects = self.db.query(Project).filter(Project.status == "active").all()
         else:
             member_ids = {

@@ -79,7 +79,7 @@ export function RolePlayHistoryPage() {
       setPlayingId(s.id);
       setAudioUrl(url);
     } catch (e) {
-      setError(extractError(e, "Không lấy được recording"));
+      setError(extractError(e, "Không lấy được bản ghi âm"));
     }
   };
 
@@ -109,26 +109,26 @@ export function RolePlayHistoryPage() {
   return (
     <div>
       <div className="d-flex justify-content-between align-items-center mb-3">
-        <h2 className="mb-0">Lịch sử role-play</h2>
+        <h2 className="mb-0">Lịch sử vai trò-play</h2>
         <Link to="/roleplay" className="btn btn-outline-primary btn-sm">
           <i className="bi bi-arrow-left me-1"></i> Về danh sách
         </Link>
       </div>
       {items.length === 0 ? (
         <Card body className="text-muted text-center">
-          Bạn chưa thực hiện phiên role-play nào.
+          Bạn chưa thực hiện phiên vai trò-play nào.
         </Card>
       ) : (
         <Table responsive hover>
           <thead>
             <tr>
-              <th>Project</th>
+              <th>Dự án</th>
               <th>Kịch bản</th>
               <th>Bắt đầu</th>
               <th>Thời lượng</th>
               <th>Trạng thái</th>
-              <th>Recording</th>
-              <th>Đánh giá report</th>
+              <th>Bản ghi âm</th>
+              <th>Đánh giá báo cáo</th>
             </tr>
           </thead>
           <tbody>
@@ -196,7 +196,7 @@ export function RolePlayHistoryPage() {
               </pre>
             </Card>
           ) : (
-            <p className="text-muted small">Phiên này không có report từ agent.</p>
+            <p className="text-muted small">Phiên này không có báo cáo từ agent.</p>
           )}
 
           <Form.Group className="mt-3">

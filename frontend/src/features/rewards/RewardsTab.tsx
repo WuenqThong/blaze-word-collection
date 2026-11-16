@@ -33,7 +33,7 @@ function toLedger(items: AnnotationItem[]): LedgerEntry[] {
         amount: it.score_awarded,
         type: "credit" as LedgerType,
         title: "Điểm chính thức",
-        note: "Annotation đã được duyệt",
+        note: "Bài gán nhãn đã được duyệt",
       };
     }
     if (it.review_status === "rejected") {
@@ -44,7 +44,7 @@ function toLedger(items: AnnotationItem[]): LedgerEntry[] {
         amount: base,
         type: "debit" as LedgerType,
         title: "Bị từ chối",
-        note: it.review_note || "Annotation không được duyệt",
+        note: it.review_note || "Bài gán nhãn không được duyệt",
       };
     }
     return {
@@ -53,7 +53,7 @@ function toLedger(items: AnnotationItem[]): LedgerEntry[] {
       amount: it.score_awarded,
       type: "pending" as LedgerType,
       title: "Đang chờ duyệt",
-      note: "Điểm sẽ chính thức sau khi admin duyệt",
+      note: "Điểm sẽ chính thức sau khi quản trị viên duyệt",
     };
   });
 }
@@ -93,9 +93,9 @@ export function RewardsTab() {
         <Alert variant="warning" className="d-flex align-items-start gap-2">
           <i className="bi bi-exclamation-triangle mt-1"></i>
           <div>
-            <strong>Tài khoản đang bị review.</strong>
+            <strong>Tài khoản đang bị đang đánh giá.</strong>
             <div className="small">
-              Tỉ lệ rejection của bạn đạt {Math.round((summary.error_rate ?? 0) * 100)}%. Bạn tạm thời không thể nhận task mới đến khi admin xem xét.
+              Tỉ lệ từ chối của bạn đạt {Math.round((summary.error_rate ?? 0) * 100)}%. Bạn tạm thời không thể nhận nhiệm vụ mới đến khi quản trị viên xem xét.
             </div>
           </div>
         </Alert>
@@ -125,19 +125,19 @@ export function RewardsTab() {
                 )}
               </>
             ) : (
-              <span>{summary?.count_approved ?? 0} task được duyệt</span>
+              <span>{summary?.count_approved ?? 0} nhiệm vụ được duyệt</span>
             )}
           </div>
         </div>
         <div>
           <div className="rewards-stat-label">Đang chờ duyệt</div>
           <div className="rewards-stat-value">{summary?.score_pending ?? 0}</div>
-          <div className="rewards-stat-sub">{summary?.count_pending ?? 0} task chờ</div>
+          <div className="rewards-stat-sub">{summary?.count_pending ?? 0} nhiệm vụ chờ</div>
         </div>
         <div>
           <div className="rewards-stat-label">Bị clawback</div>
           <div className="rewards-stat-value text-danger">−{summary?.count_rejected ?? 0}</div>
-          <div className="rewards-stat-sub">task bị từ chối</div>
+          <div className="rewards-stat-sub">nhiệm vụ bị từ chối</div>
         </div>
       </div>
 

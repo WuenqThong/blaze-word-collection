@@ -8,7 +8,7 @@ function complete(input: DemoState, id: string) {
   let state = input;
   for (let i = 0; i < 10; i++) {
     const q = state.sessions.find((s) => s.id === id)!.questions[i];
-    state = applyCommand(state, { type: "answer", id, index: i, next: i + 1, answer: { ...blankAnswer(), text: q.accepted[0] ?? `Nội dung đóng góp ${i}`, selectedOptionId: q.correctOptionId, meaning: `Nghĩa ${i}`, standard: `Phổ thông ${i}`, context: `Ngữ cảnh ${i}` } });
+    state = applyCommand(state, { type: "answer", id, index: i, next: i + 1, answer: { ...blankAnswer(), originalText: i === 9 ? "Mi đi mô rứa?" : "chừ", text: q.accepted[0] ?? `Nội dung đóng góp ${i}`, selectedOptionId: q.correctOptionId, meaning: `Nghĩa ${i}`, standard: `Phổ thông ${i}`, context: `Ngữ cảnh ${i}` } });
   }
   return applyCommand(state, { type: "submit", id, region: "Quảng Nam", upbringing: "Quảng Nam", usage: "Quảng Nam" });
 }

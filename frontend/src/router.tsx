@@ -4,6 +4,7 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { AdminRoute } from "./components/AdminRoute";
 import { LoginPage } from "./features/auth/LoginPage";
 import { RegisterPage } from "./features/auth/RegisterPage";
+import { ResetPasswordPage } from "./features/auth/ResetPasswordPage";
 
 import { PublicLayout, LandingPage, AboutDataPage } from "./features/dialect/PublicPages";
 import { ContributionWizard } from "./features/dialect/ContributionWizard";
@@ -11,13 +12,15 @@ import { ContributionsPage, ContributionDetailPage, DialectProfilePage } from ".
 import { DialectDashboard, DialectReviewPage, SourcesPage, DatasetsPage, ParticipantsPage, LegacyPage } from "./features/dialect/AdminPages";
 import { ErrorPage } from "./pages/ErrorPage";
 import { ReviewerRoute } from "./components/ReviewerRoute";
-import { AuthProvider } from "./features/auth/AuthContext";
+import { AuthProvider } from "./features/auth/AuthProvider";
 import { demoRoute } from "./features/demo/routes";
 import { pilotRoutes } from "./lib/pilotRoutes";
+import { ApplicationError } from "./components/ApplicationError";
 export const router = createBrowserRouter(pilotRoutes([
   // Auth pages full-screen, không dùng Layout
   { path: "/login", element: <AuthProvider><LoginPage /></AuthProvider> },
   { path: "/register", element: <AuthProvider><RegisterPage /></AuthProvider> },
+  { path: "/reset-password", element: <ResetPasswordPage /> },
   { path: "/", element: <Navigate to="/demo" replace/> },
   { path: "/play", element: <Navigate to="/demo/play" replace/> },
   demoRoute,
@@ -71,4 +74,4 @@ export const router = createBrowserRouter(pilotRoutes([
       { path: "*", element: <ErrorPage /> },
     ],
   },
-]));
+]).map(route => ({ ...route, errorElement: route.errorElement ?? <ApplicationError /> })));

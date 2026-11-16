@@ -4,6 +4,8 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: "jsdom",
+    // Bound jsdom workers so CI and local QA do not starve auth/IndexedDB timers.
+    maxWorkers: 4,
     include: ["tests/**/*.test.{ts,tsx}"],
     setupFiles: ["./tests/setup.ts"],
     testTimeout: 20000,

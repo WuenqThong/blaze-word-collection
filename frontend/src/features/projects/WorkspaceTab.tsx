@@ -1,3 +1,4 @@
+import { displayLabel } from "../../lib/display";
 import { useEffect, useState } from "react";
 import { Alert, Button } from "react-bootstrap";
 import { Link } from "react-router-dom";
@@ -39,12 +40,12 @@ export function WorkspaceTab({ project, isAdmin = false }: WorkspaceTabProps) {
       <div className="mb-2">
         <span className="ws-eyebrow">
           <span className={`ws-status-dot ${project.status}`}></span>
-          {STATUS_TEXT[project.status] ?? project.status}
+          {STATUS_TEXT[project.status] ?? displayLabel(project.status)}
         </span>
       </div>
       <h1 className="ws-title">{project.name}</h1>
       <p className="ws-subtitle">
-        {project.description?.trim() || "Tham gia gán nhãn để nhận điểm thưởng cho mỗi annotation hoàn tất."}
+        {project.description?.trim() || "Tham gia gán nhãn để nhận điểm thưởng cho mỗi bài gán nhãn hoàn tất."}
       </p>
 
       {!isAdmin && (
@@ -52,11 +53,11 @@ export function WorkspaceTab({ project, isAdmin = false }: WorkspaceTabProps) {
           <div>
             <div className="ws-stat-label">Đã hoàn thành</div>
             <div className="ws-stat-value">
-              {stats?.annotated_count ?? 0}<span className="unit">audio</span>
+              {stats?.annotated_count ?? 0}<span className="unit">âm thanh</span>
             </div>
           </div>
           <div>
-            <div className="ws-stat-label">Điểm pending</div>
+            <div className="ws-stat-label">Điểm đang chờ</div>
             <div className="ws-stat-value score-value">
               {stats?.score_pending ?? 0}<span className="unit">điểm</span>
             </div>
@@ -65,7 +66,7 @@ export function WorkspaceTab({ project, isAdmin = false }: WorkspaceTabProps) {
       )}
 
       <div className="mb-4">
-        <div className="ws-section-label">Loại task &amp; điểm thưởng</div>
+        <div className="ws-section-label">Loại nhiệm vụ &amp; điểm thưởng</div>
         {project.task_types.map((tt) => {
           const meta = TASK_TYPE_LABELS[tt];
           const points = project.scoring[tt] ?? 0;
@@ -91,7 +92,7 @@ export function WorkspaceTab({ project, isAdmin = false }: WorkspaceTabProps) {
               </Link>
               <span className="ws-cta-hint">
                 <i className="bi bi-stars me-1"></i>
-                Hệ thống sẽ chọn ngẫu nhiên một audio cho bạn.
+                Hệ thống sẽ chọn ngẫu nhiên một âm thanh cho bạn.
               </span>
             </>
           ) : (
@@ -101,7 +102,7 @@ export function WorkspaceTab({ project, isAdmin = false }: WorkspaceTabProps) {
               </Button>
               <span className="ws-cta-hint">
                 <i className="bi bi-info-circle me-1"></i>
-                Project chưa active — quay lại sau nhé.
+                Dự án chưa đang hoạt động — quay lại sau nhé.
               </span>
             </>
           )}

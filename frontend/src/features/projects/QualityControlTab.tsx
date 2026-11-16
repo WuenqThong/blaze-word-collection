@@ -7,7 +7,7 @@ import { TASK_TYPE_LABELS, type TaskType } from "../../lib/projectTypes";
 import { UploadModal } from "../audios/UploadModal";
 import { EditLabelModal } from "./EditLabelModal";
 import { UploadLabelsModal } from "./UploadLabelsModal";
-import { useConfirm } from "../../components/ConfirmProvider";
+import { useConfirm } from "../../components/useConfirm";
 
 interface QualityControlTabProps {
   projectId: number;
@@ -52,7 +52,7 @@ const TASK_VIEW: Record<TaskType, {
 export function QualityControlTab({ projectId, enabledTaskTypes }: QualityControlTabProps) {
   const confirm = useConfirm();
   const [items, setItems] = useState<AudioItem[] | null>(null);
-  const [activeType, setActiveType] = useState<TaskType>(enabledTaskTypes[0] ?? "audio_label");
+  const [selectedType, setActiveType] = useState<TaskType>(enabledTaskTypes[0] ?? "audio_label");
   const [error, setError] = useState<string | null>(null);
   const [showUpload, setShowUpload] = useState(false);
   const [showLabels, setShowLabels] = useState(false);
@@ -66,11 +66,7 @@ export function QualityControlTab({ projectId, enabledTaskTypes }: QualityContro
 
   useEffect(() => { reload(); }, [reload]);
 
-  useEffect(() => {
-    if (!enabledTaskTypes.includes(activeType) && enabledTaskTypes.length > 0) {
-      setActiveType(enabledTaskTypes[0]);
-    }
-  }, [enabledTaskTypes, activeType]);
+  const activeType = enabledTaskTypes.includes(selectedType) ? selectedType : (enabledTaskTypes[0] ?? "audio_label");
 
   const goldenItems = useMemo(() => items?.filter((it) => it.is_golden) ?? null, [items]);
 
@@ -98,7 +94,7 @@ export function QualityControlTab({ projectId, enabledTaskTypes }: QualityContro
   const handleDelete = async (id: number) => {
     const ok = await confirm({
       title: "Xoá dữ liệu kiểm soát",
-      message: "Xoá golden item này khỏi tập kiểm soát chất lượng?",
+      message: "Xoá mẫu kiểm tra chuẩn item này khỏi tập kiểm soát chất lượng?",
       confirmText: "Xoá",
       variant: "danger",
       icon: "bi-trash",
@@ -150,8 +146,8 @@ export function QualityControlTab({ projectId, enabledTaskTypes }: QualityContro
       {missingCount > 0 && (
         <Alert variant="warning" className="py-2 small">
           <i className="bi bi-exclamation-triangle-fill me-2"></i>
-          <strong>{missingCount}</strong> câu chưa có nhãn — không thể dùng để kiểm tra annotator.
-          Bấm "Thêm nhãn" trên từng dòng hoặc upload CSV/Excel để bổ sung.
+          <strong>{missingCount}</strong> câu chưa có nhãn — không thể dùng để kiểm tra người gán nhãn.
+          Bấm "Thêm nhãn" trên từng dòng hoặc tải lên CSV/Excel để bổ sung.
         </Alert>
       )}
 
@@ -230,17 +226,17 @@ function GoldenGroup({ taskType, items, onPlay, onDelete, onAdd, onUploadLabels,
         </div>
         <div className="flex-grow-1 min-w-0">
           <div className="ds-group-title">{meta.title}</div>
-          <div className="ds-group-sub">Dữ liệu kiểm soát đã có ground truth</div>
+          <div className="ds-group-sub">Dữ liệu kiểm soát đã có đáp án chuẩn</div>
         </div>
         <span className="ds-group-count">{items.length}</span>
         <button
           type="button"
           className="ds-group-upload-labels"
           onClick={onUploadLabels}
-          title="Upload CSV nhãn (force update)"
+          title="Tải lên CSV nhãn (ghi đè dữ liệu)"
         >
           <i className="bi bi-filetype-csv"></i>
-          <span>Upload nhãn</span>
+          <span>Tải lên nhãn</span>
         </button>
         <button
           type="button"
@@ -265,9 +261,9 @@ function GoldenGroup({ taskType, items, onPlay, onDelete, onAdd, onUploadLabels,
                 </tr>
               ) : (
                 <tr>
-                  <th style={{ width: "32%" }}>Tên file</th>
+                  <th style={{ width: "32%" }}>Tên tệp</th>
                   <th>{view.contentLabel}</th>
-                  <th style={{ width: 90 }}>Size</th>
+                  <th style={{ width: 90 }}>Kích thước</th>
                   <th style={{ width: 90 }}></th>
                 </tr>
               )}
@@ -294,7 +290,7 @@ function GoldenGroup({ taskType, items, onPlay, onDelete, onAdd, onUploadLabels,
                               type="button"
                               className="ds-action"
                               onClick={() => onPlay(it.id)}
-                              title="Mở file"
+                              title="Mở tệp"
                             >
                               <i className="bi bi-play-circle"></i>
                             </button>
@@ -333,7 +329,7 @@ function GoldenGroup({ taskType, items, onPlay, onDelete, onAdd, onUploadLabels,
                           type="button"
                           className="ds-action"
                           onClick={() => onEdit(it)}
-                          title="Sửa nhãn (force update)"
+                          title="Sửa nhãn (ghi đè dữ liệu)"
                         >
                           <i className="bi bi-pencil"></i>
                         </button>

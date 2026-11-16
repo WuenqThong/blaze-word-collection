@@ -63,11 +63,11 @@ export function ReportsAdminPage() {
       <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
         <div>
           <Link to="/dashboard" className="small text-muted">
-            <i className="bi bi-arrow-left me-1"></i>Dashboard
+            <i className="bi bi-arrow-left me-1"></i>Tổng quan
           </Link>
-          <h3 className="mt-1 mb-1">Báo cáo audio</h3>
+          <h3 className="mt-1 mb-1">Báo cáo âm thanh</h3>
           <p className="text-muted mb-0 mt-1">
-            Annotator báo cáo audio bị lỗi. Approved → user nhận điểm như annotation thường. Rejected → không tính.
+            Người gán nhãn báo cáo âm thanh bị lỗi. Đã chấp nhận → người dùng nhận điểm như bài gán nhãn thường. Đã từ chối → không tính.
           </p>
         </div>
         <Form.Select size="sm" style={{ width: 200 }}
@@ -102,7 +102,7 @@ export function ReportsAdminPage() {
                   className="ledger-icon"
                   onClick={() => handlePresign(r.project_id, r.task_id)}
                   style={{ background: "var(--surface-2)", color: "var(--text-strong)", border: "none", cursor: "pointer" }}
-                  title="Mở audio"
+                  title="Mở âm thanh"
                 >
                   <i className="bi bi-play-fill"></i>
                 </button>
@@ -117,8 +117,8 @@ export function ReportsAdminPage() {
                   <div className="ledger-meta">
                     <i className="bi bi-music-note-beamed me-1"></i>{r.audio_filename ?? `audio #${r.task_id}`}
                   </div>
-                  {r.description && <div className="ledger-note">User: {r.description}</div>}
-                  {r.admin_note && <div className="ledger-note">Admin: {r.admin_note}</div>}
+                  {r.description && <div className="ledger-note">Người dùng: {r.description}</div>}
+                  {r.admin_note && <div className="ledger-note">Quản trị viên: {r.admin_note}</div>}
                 </div>
                 <div className="d-flex flex-column align-items-end gap-2" style={{ minWidth: 200 }}>
                   <span className={`status-pill ${status.cls}`}>{status.text}</span>
@@ -150,7 +150,7 @@ export function ReportsAdminPage() {
         </Modal.Header>
         <Modal.Body>
           <Form.Control as="textarea" rows={3}
-            placeholder="VD: audio vẫn nghe rõ, không phải lỗi..."
+            placeholder="VD: âm thanh vẫn nghe rõ, không phải lỗi..."
             value={reject?.note ?? ""}
             onChange={(e) => reject && setReject({ ...reject, note: e.target.value })}
             autoFocus />

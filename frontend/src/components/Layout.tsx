@@ -1,28 +1,22 @@
 import { useState } from "react";
-import { Outlet, Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Alert, Dropdown, Offcanvas } from "react-bootstrap";
+import { Outlet, Link, NavLink, useLocation } from "react-router-dom";
+import { Offcanvas } from "react-bootstrap";
 import { useAuth } from "../features/auth/AuthContext";
 
 
 import { Brand } from "./Brand";
-import { pageTitle, roleLabel } from "../features/dialect/navigation";
+import { pageTitle } from "../features/dialect/navigation";
+import { AccountButton } from "../features/auth/AccountButton";
 import { LEGACY_ENABLED } from "../lib/pilotRoutes";
 
-function initials(name: string) {
-  return name.split(/\s+/).filter(Boolean).slice(-2).map((part) => part[0]).join("");
-}
-
 export function Layout() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
   const { pathname } = useLocation();
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem("collection.sidebar.collapsed") === "true"; } catch { return false; }
   });
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [logoutError, setLogoutError] = useState<string | null>(null);
-  const [loggingOut, setLoggingOut] = useState(false);
-  const isAdmin = user?.role === "admin";
+  const isAdmin = ["admin", "reviewer"].includes(user?.role ?? "");
 
   const title = pageTitle(pathname);
 
@@ -30,17 +24,6 @@ export function Layout() {
     const next = !collapsed;
     setCollapsed(next);
     try { localStorage.setItem("collection.sidebar.collapsed", String(next)); } catch { /* optional preference */ }
-  }
-
-  async function handleLogout() {
-    setLoggingOut(true);
-    setLogoutError(null);
-    try {
-      await logout();
-      setMobileOpen(false);
-      navigate("/login", { replace: true });
-    } catch { setLogoutError("Không thể đăng xuất. Vui lòng thử lại."); }
-    finally { setLoggingOut(false); }
   }
 
   const navigation = (compact: boolean) => {
@@ -79,7 +62,7 @@ export function Layout() {
       <nav className="workspace-navigation" aria-label="Điều hướng chính">{navigation(collapsed)}</nav>
       <div className="workspace-sidebar-footer">
         <NavLink to="/settings" className={({ isActive }) => `workspace-nav-link ${isActive ? "is-active" : ""}`} title={collapsed ? "Cài đặt" : undefined} aria-label={collapsed ? "Cài đặt" : undefined}>
-          <i className="bi bi-geo-alt" aria-hidden="true" /><span>Hồ sơ vùng sử dụng</span>
+          <i className="bi bi-geo-alt" aria-hidden="true" /><span>Hồ sơ & cài đặt</span>
         </NavLink>
         <button type="button" onClick={toggleSidebar} className="workspace-nav-link sidebar-toggle" aria-expanded={!collapsed} aria-label={collapsed ? "Mở rộng thanh bên" : "Thu gọn thanh bên"}>
           <i className={`bi bi-layout-sidebar${collapsed ? "-inset" : ""}`} aria-hidden="true" /><span>Thu gọn thanh bên</span>
@@ -90,35 +73,23 @@ export function Layout() {
     <div className="workspace-panel">
       <header className="workspace-header">
         <div className="workspace-header-heading">
-          <button className="workspace-icon-button mobile-menu-toggle" type="button" aria-label="Mở menu điều hướng" onClick={() => setMobileOpen(true)}><i className="bi bi-list" aria-hidden="true" /></button>
+          <button className="workspace-icon-button mobile-menu-toggle" type="button" aria-label="Mở danh mục điều hướng" onClick={() => setMobileOpen(true)}><i className="bi bi-list" aria-hidden="true" /></button>
           <span className="workspace-breadcrumb">Không gian làm việc <i className="bi bi-chevron-right" aria-hidden="true" /></span>
           <span className="workspace-page-title">{title}</span>
         </div>
         <div className="workspace-header-actions">
 
-          {user ? <Dropdown align="end">
-            <Dropdown.Toggle variant="" className="workspace-account" id="workspace-account">
-              <span className="workspace-avatar">{initials(user.full_name)}</span>
-              <span className="workspace-account-copy"><strong>{user.full_name}</strong><small>{roleLabel(user.role)}</small></span>
-            </Dropdown.Toggle>
-            <Dropdown.Menu>
-              <Dropdown.Header className="workspace-email">{user.email}</Dropdown.Header>
-              <Dropdown.Item as={Link} to="/settings">Hồ sơ vùng sử dụng</Dropdown.Item>
-              <Dropdown.Divider />
-              <Dropdown.Item as="button" onClick={handleLogout} disabled={loggingOut} className="text-danger">{loggingOut ? "Đang đăng xuất…" : "Đăng xuất"}</Dropdown.Item>
-            </Dropdown.Menu>
-          </Dropdown> : <Link to="/login" className="btn btn-primary">Đăng nhập</Link>}
+          <AccountButton />
         </div>
       </header>
       <main id="workspace-main" tabIndex={-1} className={`workspace-main ${pathname.startsWith("/admin/review") ? "workspace-main-review" : ""}`}>
-        {logoutError && <Alert variant="danger" dismissible onClose={() => setLogoutError(null)}>{logoutError}</Alert>}
         <div className="workspace-page" key={pathname}><Outlet /></div>
       </main>
     </div>
-    <Offcanvas show={mobileOpen} onHide={() => setMobileOpen(false)} placement="start" className="workspace-mobile-drawer">
-      <Offcanvas.Header closeButton><Offcanvas.Title><Brand /></Offcanvas.Title></Offcanvas.Header>
+    <Offcanvas aria-label="Điều hướng di động" show={mobileOpen} onHide={() => setMobileOpen(false)} placement="start" className="workspace-mobile-drawer">
+      <Offcanvas.Header closeButton closeLabel="Đóng"><Offcanvas.Title><Brand /></Offcanvas.Title></Offcanvas.Header>
       <Offcanvas.Body><nav aria-label="Điều hướng di động">{navigation(false)}
-        <NavLink to="/settings" onClick={() => setMobileOpen(false)} className="workspace-nav-link"><i className="bi bi-geo-alt" aria-hidden="true" /><span>Hồ sơ vùng sử dụng</span></NavLink>
+        <NavLink to="/settings" onClick={() => setMobileOpen(false)} className="workspace-nav-link"><i className="bi bi-geo-alt" aria-hidden="true" /><span>Hồ sơ & cài đặt</span></NavLink>
       </nav></Offcanvas.Body>
     </Offcanvas>
   </div>;

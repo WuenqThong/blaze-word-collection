@@ -16,7 +16,7 @@ export function ProjectsListPage() {
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<KindFilter>("all");
   const [attempt, setAttempt] = useState(0);
-  const isAdmin = user?.role === "admin";
+  const isAdmin = ["admin", "reviewer"].includes(user?.role ?? "");
 
   useEffect(() => {
     let cancelled = false;

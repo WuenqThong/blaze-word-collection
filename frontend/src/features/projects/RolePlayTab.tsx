@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Alert, Badge, Button, Card, Form, Spinner } from "react-bootstrap";
 import {
   roleplayApi,
@@ -51,7 +51,7 @@ function MemberView({ projectId }: { projectId: number }) {
   if (!scenarios) return <Spinner animation="border" />;
 
   if (scenarios.length === 0) {
-    return <Card body className="text-muted text-center">Project chưa có kịch bản role-play.</Card>;
+    return <Card body className="text-muted text-center">Dự án chưa có kịch bản vai trò-play.</Card>;
   }
 
   return (
@@ -188,13 +188,13 @@ function ScenariosListView({
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
 
-  const load = () =>
+  const load = useCallback(() =>
     roleplayApi
       .listProjectScenarios(projectId)
       .then(setItems)
-      .catch((e) => setError(extractError(e, "Không tải được kịch bản")));
+      .catch((e) => setError(extractError(e, "Không tải được kịch bản"))), [projectId]);
 
-  useEffect(() => { void load(); }, [projectId]);
+  useEffect(() => { void load(); }, [load]);
 
   const importFromAgent = async (overwrite: boolean) => {
     setImporting(true);
@@ -218,7 +218,7 @@ function ScenariosListView({
       {!agentConfigured && (
         <Alert variant="warning" className="mb-3">
           <i className="bi bi-exclamation-triangle me-2"></i>
-          Project chưa cấu hình <strong>agent endpoint</strong>. Vào tab <strong>Cấu hình</strong> để thêm URL agent trước.
+          Dự án chưa cấu hình <strong>agent địa chỉ kết nối</strong>. Vào tab <strong>Cấu hình</strong> để thêm URL agent trước.
         </Alert>
       )}
       {error && <Alert variant="danger" onClose={() => setError(null)} dismissible>{error}</Alert>}
@@ -318,15 +318,15 @@ function ScenarioView({
   const [testCases, setTestCases] = useState<RolePlayTestCase[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const load = () =>
+  const load = useCallback(() =>
     Promise.all([
       roleplayApi.getScenario(scenarioId),
       roleplayApi.listProjectScenarioTestCases(projectId, scenarioId),
     ])
       .then(([s, tcs]) => { setScenario(s); setTestCases(tcs); })
-      .catch((e) => setError(extractError(e, "Không tải được scenario")));
+      .catch((e) => setError(extractError(e, "Không tải được scenario"))), [projectId, scenarioId]);
 
-  useEffect(() => { void load(); }, [projectId, scenarioId]);
+  useEffect(() => { void load(); }, [load]);
 
   if (error) return <Alert variant="danger">{error}</Alert>;
   if (!scenario || !testCases) return <Spinner animation="border" />;
@@ -342,7 +342,7 @@ function ScenarioView({
               <Badge bg="secondary" className="ms-2">{testCases.length}</Badge>
             </h5>
             <p className="text-muted small mb-0">
-              Mỗi trường hợp là 1 tình huống cụ thể annotator đóng vai. Annotator chọn 1 case khi bắt đầu.
+              Mỗi trường hợp là 1 tình huống cụ thể người gán nhãn đóng vai. Người gán nhãn chọn 1 case khi bắt đầu.
             </p>
           </div>
           <Button size="sm" onClick={onCreateTestCase} className="flex-shrink-0">
@@ -369,7 +369,7 @@ function ScenarioView({
                 <Card.Body>
                   <div className="d-flex justify-content-between align-items-start mb-2">
                     <strong className="flex-grow-1 me-2">{tc.name}</strong>
-                    {!tc.is_active && <Badge bg="secondary">off</Badge>}
+                    {!tc.is_active && <Badge bg="secondary">tắt</Badge>}
                   </div>
                   {tc.description && (
                     <p className="text-muted small mb-3 rp-tc-desc">{tc.description}</p>
@@ -426,13 +426,16 @@ function ScenarioEditView({
   const [error, setError] = useState<string | null>(null);
   const [scenario, setScenario] = useState<RolePlayScenario | null>(null);
 
+  const [previousInputs, setPreviousInputs] = useState([scenarioId]);
+  if (previousInputs[0] !== scenarioId) {
+    setPreviousInputs([scenarioId]);
+    setForm(EMPTY_SCENARIO);
+    setLoading(scenarioId !== null);
+    setError(null);
+  }
+
   useEffect(() => {
-    if (scenarioId === null) {
-      setForm(EMPTY_SCENARIO);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
+    if (scenarioId === null) return;
     roleplayApi
       .getScenario(scenarioId)
       .then((s) => {
@@ -498,7 +501,7 @@ function ScenarioEditView({
                 onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </Form.Group>
             <Form.Group className="col-md-5">
-              <Form.Label>use_case (slug)</Form.Label>
+              <Form.Label>Mã tình huống</Form.Label>
               <Form.Control value={form.use_case}
                 onChange={(e) => setForm({ ...form, use_case: e.target.value })}
                 placeholder="ha_scenario" />
@@ -510,14 +513,14 @@ function ScenarioEditView({
               onChange={(e) => setForm({ ...form, description: e.target.value })} />
           </Form.Group>
           <Form.Group className="mt-3">
-            <Form.Label>Hướng dẫn mặc định cho annotator</Form.Label>
+            <Form.Label>Hướng dẫn mặc định cho người gán nhãn</Form.Label>
             <Form.Control as="textarea" rows={5} value={form.instructions}
               onChange={(e) => setForm({ ...form, instructions: e.target.value })}
-              placeholder="Hướng dẫn dùng nếu annotator không chọn trường hợp cụ thể." />
+              placeholder="Hướng dẫn dùng nếu người gán nhãn không chọn trường hợp cụ thể." />
           </Form.Group>
           <div className="row g-3 mt-1">
             <Form.Group className="col-md-6">
-              <Form.Label>Tối đa lượt/user</Form.Label>
+              <Form.Label>Tối đa lượt/người dùng</Form.Label>
               <Form.Control type="number" min={0} value={form.max_tasks_per_user}
                 onChange={(e) => setForm({ ...form, max_tasks_per_user: Number(e.target.value) || 0 })} />
               <Form.Text>0 = không giới hạn</Form.Text>
@@ -529,7 +532,7 @@ function ScenarioEditView({
               <Form.Text>0 = không giới hạn</Form.Text>
             </Form.Group>
           </div>
-          <Form.Check className="mt-3" type="switch" label="Active"
+          <Form.Check className="mt-3" type="switch" label="Đang hoạt động"
             checked={form.is_active}
             onChange={(e) => setForm({ ...form, is_active: e.target.checked })} />
         </Form>
@@ -584,13 +587,16 @@ function TestCaseEditView({
   const [error, setError] = useState<string | null>(null);
   const [testCase, setTestCase] = useState<RolePlayTestCase | null>(null);
 
+  const [previousInputs, setPreviousInputs] = useState([testCaseId]);
+  if (previousInputs[0] !== testCaseId) {
+    setPreviousInputs([testCaseId]);
+    setForm(EMPTY_TEST_CASE);
+    setLoading(testCaseId !== null);
+    setError(null);
+  }
+
   useEffect(() => {
-    if (testCaseId === null) {
-      setForm(EMPTY_TEST_CASE);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
+    if (testCaseId === null) return;
     roleplayApi
       .listProjectScenarioTestCases(projectId, scenarioId)
       .then((tcs) => {
@@ -668,18 +674,18 @@ function TestCaseEditView({
               onChange={(e) => setForm({ ...form, description: e.target.value })} />
           </Form.Group>
           <Form.Group className="mt-3">
-            <Form.Label>Hướng dẫn cho annotator (override scenario)</Form.Label>
+            <Form.Label>Hướng dẫn cho người gán nhãn (override scenario)</Form.Label>
             <Form.Control as="textarea" rows={6} value={form.instructions}
               onChange={(e) => setForm({ ...form, instructions: e.target.value })}
-              placeholder="Annotator đóng vai gì? Trả lời ra sao? Để trống → dùng hướng dẫn của kịch bản." />
+              placeholder="Người gán nhãn đóng vai gì? Trả lời ra sao? Để trống → dùng hướng dẫn của kịch bản." />
           </Form.Group>
           <Form.Group className="mt-3">
             <Form.Label>Kết quả kỳ vọng</Form.Label>
             <Form.Control as="textarea" rows={3} value={form.expected_outcome}
               onChange={(e) => setForm({ ...form, expected_outcome: e.target.value })}
-              placeholder="Agent nên thu thập được thông tin gì? Annotator dùng để verify." />
+              placeholder="Agent nên thu thập được thông tin gì? Người gán nhãn dùng để verify." />
           </Form.Group>
-          <Form.Check className="mt-3" type="switch" label="Active"
+          <Form.Check className="mt-3" type="switch" label="Đang hoạt động"
             checked={form.is_active}
             onChange={(e) => setForm({ ...form, is_active: e.target.checked })} />
         </Form>
@@ -743,7 +749,7 @@ function ImportModal({
         <div className="rp-import-body">
           {error && <Alert variant="danger">{error}</Alert>}
           <p className="text-muted small mb-3">
-            Use cases agent server hỗ trợ. Cái nào đã import vào project hiển thị nền xanh.
+            Use cases agent máy chủ hỗ trợ. Cái nào đã import vào dự án hiển thị nền xanh.
           </p>
           {!agentUseCases ? (
             <Spinner animation="border" />

@@ -62,6 +62,7 @@ export function sourcedQuestion(it: SourcedItem): Question {
   const w = wordLabel(it.word);
   const choice = !!it.distractors;
   return {
+    originalText: it.word.replace(/\s*\([^)]*\)$/, ""),
     id, version: 1, kind: "GATE", format: choice ? "choice" : "fill",
     prompt: choice ? `Trong câu ‘${it.sentence}’, ${w} có nghĩa là gì?` : `Điền cách nói phổ thông của ${w} trong câu: ‘${it.sentence}’`,
     accepted: it.accepted,
@@ -76,6 +77,7 @@ export function sourcedQuestion(it: SourcedItem): Question {
 export function unverifiedQuestion(it: BankItem, slot: number): Question {
   const { role, kind } = ROLES[slot];
   return {
+    originalText: kind === "SENTENCE" ? it.sentence : kind === "LEXEME" ? it.word.replace(/\s*\([^)]*\)$/, "") : undefined,
     id: `d1b-u-${it.id}-${role}`, version: 1, kind, format: "open", prompt: openPrompt(role, it), accepted: [],
     region: REGION, topic: TOPIC, sourceId: UNVERIFIED_SOURCE, approval: "DEMO_APPROVED", demo: true, difficulty: 1,
     provenance: provenance(it, "unverified", `${it.word}: ${it.meaning} · ${it.sourceType}${it.note ? ` · ${it.note}` : ""}`),

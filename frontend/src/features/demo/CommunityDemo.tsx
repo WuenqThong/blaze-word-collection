@@ -1,3 +1,5 @@
+import { ResponsiveTable } from "../../components/ResponsiveTable";
+import { displayLabel } from "../../lib/display";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useDemo } from "./context";
@@ -32,7 +34,7 @@ export function DictionaryDemo() {
   const item = filtered.find((c) => c.id === selected);
   return (
     <>
-      <Heading title="Từ điển đã duyệt trong DEMO">
+      <Heading title="Từ điển đã duyệt trong Minh họa">
         <p>
           Tra không dấu hoặc gần đúng. Chỉ hiển thị bản chuẩn hóa đủ quyền công
           khai; đây không phải từ điển ngôn ngữ đã phát hành thật.
@@ -105,7 +107,7 @@ export function DictionaryDemo() {
             ))}
           {!item.raw.mediaIds.length && (
             <p className="demo-note">
-              Chưa có bản thu minh họa. Người góp có thể bổ sung audio có quyền.
+              Chưa có bản thu minh họa. Người góp có thể bổ sung âm thanh có quyền.
             </p>
           )}
           <Link to={`/demo/contribute?kind=${item.raw.kind}`}>
@@ -132,7 +134,7 @@ export function DictionaryDemo() {
             setFeedback("");
           }}
         >
-          Gửi vào hàng chờ reviewer
+          Gửi vào hàng chờ người duyệt
         </Action>
       </Panel>
     </>
@@ -158,7 +160,7 @@ export function CommunityDemo() {
     <>
       <Heading title="Một cách gọi, nhiều vùng sử dụng">
         <p>
-          Sơ đồ vùng từ dữ liệu DEMO; không phải bản đồ ranh giới địa lý. Không
+          Sơ đồ vùng từ dữ liệu Minh họa; không phải bản đồ ranh giới địa lý. Không
           suy vùng của người dùng từ IP hoặc giọng nói.
         </p>
       </Heading>
@@ -175,7 +177,7 @@ export function CommunityDemo() {
               <strong>{v}</strong>
               <span>
                 {items.filter((c) => c.raw.region === v).length} mục công khai
-                demo
+                minh họa
               </span>
             </button>
           ))}
@@ -183,7 +185,7 @@ export function CommunityDemo() {
         <Field label="Cách gọi / nghĩa để so sánh">
           <input value={word} onChange={(e) => setWord(e.target.value)} />
         </Field>
-        <div className="demo-table-scroll">
+        <ResponsiveTable>
           <table>
             <thead>
               <tr>
@@ -213,7 +215,7 @@ export function CommunityDemo() {
                 ))}
             </tbody>
           </table>
-        </div>
+        </ResponsiveTable>
         <Action onClick={() => setRegion("")}>So sánh tất cả vùng</Action>
       </Panel>
       <Panel title="Thử thách & phiên chợ đổi nghĩa">
@@ -244,7 +246,7 @@ export function CommunityDemo() {
         >
           Gửi đề xuất cho điều phối
         </Action>
-        {actor.role === "admin" && (
+        {["admin", "reviewer"].includes(actor.role) && (
           <Action
             disabled={!text.trim()}
             onClick={() =>
@@ -263,11 +265,11 @@ export function CommunityDemo() {
               })
             }
           >
-            Tạo nhiệm vụ từ khoảng trống (admin)
+            Tạo nhiệm vụ từ khoảng trống (quản trị viên)
           </Action>
         )}
         <p className="demo-note">
-          Câu nói lại/biến thể vẫn đi qua form nguồn, consent và RAW. Không ghi
+          Câu nói lại/biến thể vẫn đi qua biểu mẫu nguồn, phạm vi đồng ý và Bản gốc. Không ghi
           đè ý kiến khác vùng.
         </p>
         <Link className="btn btn-primary" to="/demo/contribute?kind=sentence">
@@ -279,7 +281,7 @@ export function CommunityDemo() {
           .filter((f) => f.entity.startsWith("community:"))
           .map((f) => (
             <p key={f.id}>
-              {f.entity} · {f.text} · {f.state}
+              {f.entity} · {f.text} · {displayLabel(f.state)}
             </p>
           ))}
       </Panel>

@@ -53,6 +53,7 @@ export function HistoryTab() {
     return c;
   }, [items]);
   const [playingId, setPlayingId] = useState<number | null>(null);
+  const [paused, setPaused] = useState(true);
   const [busyId, setBusyId] = useState<number | null>(null);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -98,7 +99,7 @@ export function HistoryTab() {
       setPlayingId(it.id);
       await a.play();
     } catch (e) {
-      setError(extractError(e, "Không phát được audio"));
+      setError(extractError(e, "Không phát được âm thanh"));
       setPlayingId(null);
     } finally {
       setBusyId(null);
@@ -109,8 +110,10 @@ export function HistoryTab() {
     <>
       <audio
         ref={audioRef}
-        onEnded={() => setPlayingId(null)}
+        onPlay={() => setPaused(false)}
+        onEnded={() => { setPlayingId(null); setPaused(true); }}
         onPause={() => {
+          setPaused(true);
           // Phát hiện pause do hết bài hoặc thao tác khác — không reset playingId nếu chỉ paused giữa chừng
         }}
         preload="none"
@@ -149,14 +152,14 @@ export function HistoryTab() {
       ) : filteredItems.length === 0 ? (
         <div className="text-center py-5 text-muted">
           <i className="bi bi-inbox" style={{ fontSize: "2.2rem" }}></i>
-          <p className="mt-2 mb-0">Chưa có annotation nào ở loại này.</p>
+          <p className="mt-2 mb-0">Chưa có bài gán nhãn nào ở loại này.</p>
         </div>
       ) : (
         <div className="history-list">
           {filteredItems.map((it) => {
             const pill = STATUS_PILL[it.review_status];
             const canEdit = it.review_status === "pending";
-            const isPlaying = playingId === it.id && !audioRef.current?.paused;
+            const isPlaying = playingId === it.id && !paused;
             const isBusy = busyId === it.id;
             return (
               <div key={it.id} className={`history-row ${isPlaying ? "is-playing" : ""}`}>

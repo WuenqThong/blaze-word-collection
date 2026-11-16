@@ -45,11 +45,11 @@ export function CampaignsDemo() {
     <>
       <Heading title="Chiến dịch và thử thách 10 câu">
         <p>
-          Link/QR riêng, nhiều đề theo vùng/chủ đề. Link localhost chỉ mở được
-          trên máy đang chạy frontend.
+          Đường dẫn/QR riêng, nhiều đề theo vùng/chủ đề. Đường dẫn localhost chỉ mở được
+          trên máy đang chạy giao diện.
         </p>
       </Heading>
-      {actor.role === "admin" && (
+      {["admin", "reviewer"].includes(actor.role) && (
         <Action onClick={() => setEditing(fresh())}>
           Tạo chiến dịch / thử thách
         </Action>
@@ -84,7 +84,8 @@ export function CampaignsDemo() {
                     setEditing({ ...editing, region: e.target.value })
                   }
                 >
-                  {state.regions.map((v) => (
+                  {editing.region && !state.regions.includes(editing.region) && <option value={editing.region}>{editing.region}</option>}
+                {state.regions.map((v) => (
                     <option key={v}>{v}</option>
                   ))}
                 </select>
@@ -156,7 +157,7 @@ export function CampaignsDemo() {
       )}
       <div className="demo-card-grid">
         {state.campaigns
-          .filter((c) => actor.role === "admin" || c.active)
+          .filter((c) => ["admin", "reviewer"].includes(actor.role) || c.active)
           .map((c) => {
             const url = `${window.location.origin}/demo/play?campaign=${c.id}`;
             const sessions = state.sessions.filter(
@@ -173,7 +174,7 @@ export function CampaignsDemo() {
                   gửi.
                 </p>
                 <CampaignQR url={url} />
-                <Field label="Link chiến dịch">
+                <Field label="Đường dẫn chiến dịch">
                   <input readOnly value={url} />
                 </Field>
                 <div className="demo-actions">
@@ -183,13 +184,13 @@ export function CampaignsDemo() {
                   >
                     {c.active ? "Tham gia chiến dịch" : "Xem chiến dịch đã tắt"}
                   </Link>
-                  {actor.role === "admin" && (
+                  {["admin", "reviewer"].includes(actor.role) && (
                     <Action onClick={() => setEditing(c)}>Sửa / bật tắt</Action>
                   )}
                 </div>
                 <small>
                   Ưu tiên bộ đề chưa chơi trong lịch sử của vai trò. Phiên đã
-                  tạo giữ snapshot khi tắt chiến dịch.
+                  tạo giữ bản lưu tại thời điểm tạo khi tắt chiến dịch.
                 </small>
               </Panel>
             );

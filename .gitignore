@@ -1,7 +1,9 @@
 # Secrets
 .env
 **/.env
+**/.env.*
 !**/.env.example
+!**/.env.*.example
 
 # Python
 .venv/
@@ -21,3 +23,23 @@ dist/
 .DS_Store
 *.log
 Blaze Cabin.app/
+
+# ML runtime artifacts (source and dependency locks remain tracked)
+ml/data/
+ml/datasets/
+ml/models/
+ml/runs/
+ml/cache/
+
+# Local database journals and QA/browser state
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+.claude/
+# Generated reports and exports
+docs/reports/
+docs/screenshots/
+*.docx

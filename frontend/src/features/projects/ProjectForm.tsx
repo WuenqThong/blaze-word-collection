@@ -1,35 +1,10 @@
 import { Card, Form, Row, Col, InputGroup } from "react-bootstrap";
-import { KIND_META, TASK_TYPE_LABELS, type ProjectKind, type TaskType, type ProjectVisibility } from "../../lib/projectTypes";
+import { KIND_META, TASK_TYPE_LABELS, type TaskType, type ProjectKind } from "../../lib/projectTypes";
+
+import type { ProjectFormState } from "./projectFormState";
+export type { ProjectFormState } from "./projectFormState";
 
 const ALL_TASK_TYPES: TaskType[] = ["audio_label", "audio_verify", "qa"];
-
-export interface ProjectFormState {
-  name: string;
-  description: string;
-  kind: ProjectKind;
-  task_types: TaskType[];
-  scoring: Record<string, number>;
-  redundancy: number;
-  golden_ratio: number;
-  repeat_ratio: number;
-  visibility: ProjectVisibility;
-  agent_endpoint: string;
-  default_language: string;
-}
-
-export const DEFAULT_FORM: ProjectFormState = {
-  name: "",
-  description: "",
-  kind: "annotate",
-  task_types: ["audio_label"],
-  scoring: { audio_label: 10, audio_verify: 5, qa: 8 },
-  redundancy: 3,
-  golden_ratio: 0.1,
-  repeat_ratio: 0.0,
-  visibility: "private",
-  agent_endpoint: "",
-  default_language: "vi",
-};
 
 interface ProjectFormProps {
   state: ProjectFormState;
@@ -50,18 +25,18 @@ const redundancyHint = (n: number) =>
 
 const goldenHint = (r: number) => {
   const pct = Math.round(r * 100);
-  if (pct === 0) return "Không kiểm tra ngẫu nhiên — chỉ phù hợp khi đã tin tưởng annotator.";
-  if (pct <= 10) return `${pct}% task là golden — mặc định cho production.`;
-  if (pct <= 20) return `${pct}% — chế độ chặt, dành cho user mới hoặc dữ liệu nhạy cảm.`;
+  if (pct === 0) return "Không kiểm tra ngẫu nhiên — chỉ phù hợp khi đã tin tưởng người gán nhãn.";
+  if (pct <= 10) return `${pct}% nhiệm vụ là mẫu kiểm tra chuẩn — mặc định cho môi trường vận hành.`;
+  if (pct <= 20) return `${pct}% — chế độ chặt, dành cho người dùng mới hoặc dữ liệu nhạy cảm.`;
   return `${pct}% — quá nghiêm, chỉ dùng khi probation.`;
 };
 
 const repeatHint = (r: number) => {
   const pct = Math.round(r * 100);
   if (pct === 0) return "Tắt — không gán lặp lại. Không phát hiện được gán random.";
-  if (pct <= 10) return `${pct}% task được gán lại cho cùng annotator để check tính nhất quán.`;
-  if (pct <= 20) return `${pct}% — chặt vừa, soi annotator có hay đổi câu trả lời không.`;
-  return `${pct}% — chế độ nghiêm, dùng khi đang điều tra một annotator nghi vấn.`;
+  if (pct <= 10) return `${pct}% nhiệm vụ được gán lại cho cùng người gán nhãn để kiểm tra tính nhất quán.`;
+  if (pct <= 20) return `${pct}% — chặt vừa, soi người gán nhãn có hay đổi câu trả lời không.`;
+  return `${pct}% — chế độ nghiêm, dùng khi đang điều tra một người gán nhãn nghi vấn.`;
 };
 
 function SectionHeader({ title, desc }: { title: string; desc?: string }) {
@@ -86,7 +61,7 @@ export function ProjectForm({ state, onChange, disabled, hideScoring = false, hi
         <Card className="mb-3">
           <Card.Body>
             <SectionHeader
-              title="Loại project"
+              title="Loại dự án"
               desc="Chọn theo mục tiêu — không đổi được sau khi tạo."
             />
             <div className="row g-3">
@@ -132,20 +107,20 @@ export function ProjectForm({ state, onChange, disabled, hideScoring = false, hi
       <Card className="mb-3">
         <Card.Body>
           <SectionHeader
-            title="Thông tin project"
-            desc="Đặt tên dễ nhận diện và mô tả ngắn để annotator hiểu mục tiêu."
+            title="Thông tin dự án"
+            desc="Đặt tên dễ nhận diện và mô tả ngắn để người gán nhãn hiểu mục tiêu."
           />
 
           <Row className="g-3">
             <Col md={6}>
               <Form.Group>
-                <Form.Label>Tên project <span className="text-danger">*</span></Form.Label>
+                <Form.Label>Tên dự án <span className="text-danger">*</span></Form.Label>
                 <Form.Control
                   type="text"
                   value={state.name}
                   required
                   disabled={disabled}
-                  placeholder="VD: VN ASR pilot batch 1"
+                  placeholder="VD: VN Nhận dạng giọng nói pilot lô dữ liệu 1"
                   onChange={(e) => onChange({ ...state, name: e.target.value })}
                 />
               </Form.Group>
@@ -175,8 +150,8 @@ export function ProjectForm({ state, onChange, disabled, hideScoring = false, hi
               <h6 className="mb-1 fw-semibold">Quyền truy cập</h6>
               <div className="text-muted small">
                 {state.visibility === "public"
-                  ? "Mọi user đăng nhập đều có thể vào project và nhận task."
-                  : "Chỉ admin và member được thêm thủ công mới truy cập được."}
+                  ? "Mọi người dùng đăng nhập đều có thể vào dự án và nhận nhiệm vụ."
+                  : "Chỉ quản trị viên và thành viên được thêm thủ công mới truy cập được."}
               </div>
             </div>
             <div className="visibility-segmented" role="group" aria-label="Quyền truy cập">
@@ -206,7 +181,7 @@ export function ProjectForm({ state, onChange, disabled, hideScoring = false, hi
           <Card.Body>
             <SectionHeader
               title="Nhiệm vụ"
-              desc="Bật các loại nhiệm vụ project hỗ trợ và đặt điểm thưởng cho từng loại."
+              desc="Bật các loại nhiệm vụ dự án hỗ trợ và đặt điểm thưởng cho từng loại."
             />
 
             <div className="d-grid gap-2">
@@ -280,12 +255,12 @@ export function ProjectForm({ state, onChange, disabled, hideScoring = false, hi
           <Card.Body>
             <SectionHeader
               title="Cấu hình agent"
-              desc="Tất cả scenarios trong project share cùng agent + ngôn ngữ này."
+              desc="Tất cả scenarios trong dự án share cùng agent + ngôn ngữ này."
             />
             <Row className="g-3">
               <Col md={8}>
                 <Form.Group>
-                  <Form.Label>Agent endpoint URL <span className="text-danger">*</span></Form.Label>
+                  <Form.Label>Agent địa chỉ kết nối URL <span className="text-danger">*</span></Form.Label>
                   <Form.Control
                     type="url"
                     value={state.agent_endpoint}
@@ -294,7 +269,7 @@ export function ProjectForm({ state, onChange, disabled, hideScoring = false, hi
                     onChange={(e) => onChange({ ...state, agent_endpoint: e.target.value })}
                   />
                   <Form.Text className="text-muted">
-                    Annotator backend proxy WS tới <code>{state.agent_endpoint || "{endpoint}"}/v1/voice-bot/ws</code>.
+                    Người gán nhãn máy chủ proxy WS tới <code>{state.agent_endpoint || "{endpoint}"}/v1/voice-bot/ws</code>.
                   </Form.Text>
                 </Form.Group>
               </Col>
@@ -307,8 +282,8 @@ export function ProjectForm({ state, onChange, disabled, hideScoring = false, hi
                     onChange={(e) => onChange({ ...state, default_language: e.target.value })}
                   >
                     <option value="vi">Tiếng Việt</option>
-                    <option value="en">English</option>
-                    <option value="km">Khmer</option>
+                    <option value="en">Tiếng Anh</option>
+                    <option value="km">Tiếng Khmer</option>
                   </Form.Select>
                 </Form.Group>
               </Col>
@@ -323,13 +298,13 @@ export function ProjectForm({ state, onChange, disabled, hideScoring = false, hi
           <Card.Body>
             <SectionHeader
               title="Kiểm soát chất lượng"
-              desc="Mức độ chéo, tỉ lệ task golden, và tỉ lệ gán lặp lại để bắt annotator gán random."
+              desc="Mức độ chéo, tỉ lệ nhiệm vụ mẫu kiểm tra chuẩn, và tỉ lệ gán lặp lại để bắt người gán nhãn gán random."
             />
 
             <Row className="g-4">
               <Col md={4}>
                 <Form.Label className="d-flex justify-content-between mb-2">
-                  <span>Redundancy <span className="text-muted">(số người gán mỗi audio)</span></span>
+                  <span>Số người cùng gán nhãn <span className="text-muted">(số người gán mỗi âm thanh)</span></span>
                   <strong className="text-primary">×{state.redundancy}</strong>
                 </Form.Label>
                 <Form.Range
@@ -349,7 +324,7 @@ export function ProjectForm({ state, onChange, disabled, hideScoring = false, hi
 
               <Col md={4}>
                 <Form.Label className="d-flex justify-content-between mb-2">
-                  <span>Golden ratio <span className="text-muted">(tỉ lệ task kiểm tra)</span></span>
+                  <span>Mẫu kiểm tra chuẩn ratio <span className="text-muted">(tỉ lệ nhiệm vụ kiểm tra)</span></span>
                   <strong className="text-primary">{Math.round(state.golden_ratio * 100)}%</strong>
                 </Form.Label>
                 <Form.Range
@@ -370,7 +345,7 @@ export function ProjectForm({ state, onChange, disabled, hideScoring = false, hi
 
               <Col md={4}>
                 <Form.Label className="d-flex justify-content-between mb-2">
-                  <span>Tỉ lệ gán lặp lại <span className="text-muted">(check tính nhất quán)</span></span>
+                  <span>Tỉ lệ gán lặp lại <span className="text-muted">(kiểm tra tính nhất quán)</span></span>
                   <strong className="text-primary">{Math.round(state.repeat_ratio * 100)}%</strong>
                 </Form.Label>
                 <Form.Range
@@ -391,7 +366,7 @@ export function ProjectForm({ state, onChange, disabled, hideScoring = false, hi
             </Row>
             <div className="small text-muted mt-3">
               <i className="bi bi-info-circle me-1"></i>
-              Câu lặp lại vẫn được tính điểm cho annotator. Hệ thống dùng câu trả lời lặp để phát hiện gán random hoặc gán sai.
+              Câu lặp lại vẫn được tính điểm cho người gán nhãn. Hệ thống dùng câu trả lời lặp để phát hiện gán random hoặc gán sai.
             </div>
           </Card.Body>
         </Card>

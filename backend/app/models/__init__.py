@@ -7,6 +7,8 @@ from .task import Task
 from .user import User
 from .wallet import UserProfile, Withdrawal
 from .dialect import DialectProfile, DialectSource, DialectContribution, DialectVote, DialectEvent, DialectRelease
+from .security import SecurityThrottle, SecurityAuditEvent, PasswordRecovery
+from .game import GameResource, GameResourceVersion, GameSession, GameCommand
 
 __all__ = [
     "User", "Project", "ProjectMember", "Audio", "Task", "Assignment", "Annotation",

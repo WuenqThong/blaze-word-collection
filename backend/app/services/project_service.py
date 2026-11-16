@@ -30,7 +30,7 @@ class ProjectService:
 
     # ---------- queries ----------
     def list_for_user(self, user: User) -> list[Project]:
-        if user.role == "admin":
+        if user.role in ('admin', 'reviewer'):
             return self.db.query(Project).order_by(Project.created_at.desc()).all()
         # Public projects + projects where user is member
         member_ids = {
@@ -53,7 +53,7 @@ class ProjectService:
         return project
 
     def assert_member(self, project: Project, user: User) -> None:
-        if user.role == "admin":
+        if user.role in ('admin', 'reviewer'):
             return
         if getattr(project, "visibility", "private") == "public":
             return

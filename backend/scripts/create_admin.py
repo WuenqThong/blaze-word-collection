@@ -9,6 +9,7 @@ import sys
 from datetime import datetime
 
 from app.core.database import SessionLocal, init_db
+from app.core import audit  # noqa: F401
 from app.core.security import hash_password
 from app.models import User
 
@@ -20,21 +21,21 @@ def main(email: str, password: str, full_name: str) -> None:
         email = email.strip().lower()
         user = db.query(User).filter(User.email == email).first()
         if user:
-            user.role = "admin"
+            user.role = "reviewer"
             db.commit()
-            print(f"[ok] Promoted existing user '{email}' -> admin")
+            print(f"[ok] Promoted existing user '{email}' -> reviewer")
             return
 
         user = User(
             email=email,
             full_name=full_name.strip(),
             password_hash=hash_password(password),
-            role="admin",
+            role="reviewer",
             created_at=datetime.utcnow(),
         )
         db.add(user)
         db.commit()
-        print(f"[ok] Created admin '{email}'")
+        print(f"[ok] Created reviewer '{email}'")
     finally:
         db.close()
 

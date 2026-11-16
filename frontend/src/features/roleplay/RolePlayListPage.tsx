@@ -10,7 +10,7 @@ import type { Project } from "../../lib/projectTypes";
 
 export function RolePlayListPage() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = ["admin", "reviewer"].includes(user?.role ?? "");
   const [tasks, setTasks] = useState<RolePlayScenario[] | null>(null);
   const [collectProjects, setCollectProjects] = useState<Project[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -36,17 +36,17 @@ export function RolePlayListPage() {
     return (
       <div className="text-center py-5">
         <i className="bi bi-mic-mute display-1 d-block mb-3 text-muted"></i>
-        <h4>Chưa có task role-play</h4>
+        <h4>Chưa có nhiệm vụ vai trò-play</h4>
         {isAdmin ? (
           <div className="mt-3">
             <p className="text-muted">
               {collectProjects.length === 0
-                ? "Chưa có project loại 'thu thập'. Tạo project mới với loại 'Thu thập', sau đó vào tab Role play để import task từ agent."
-                : "Vào project thu thập → tab Role play → Import từ agent. Đảm bảo task active và project public hoặc bạn là member."}
+                ? "Chưa có dự án loại 'thu thập'. Tạo dự án mới với loại 'Thu thập', sau đó vào tab Vai trò play để import nhiệm vụ từ agent."
+                : "Vào dự án thu thập → tab Vai trò play → Import từ agent. Đảm bảo nhiệm vụ đang hoạt động và dự án công khai hoặc bạn là thành viên."}
             </p>
             {collectProjects.length === 0 ? (
               <Link to="/projects/new" className="btn btn-primary mt-2">
-                <i className="bi bi-plus-lg me-2"></i> Tạo project thu thập
+                <i className="bi bi-plus-lg me-2"></i> Tạo dự án thu thập
               </Link>
             ) : (
               <div className="d-flex justify-content-center gap-2 flex-wrap mt-2">
@@ -60,7 +60,7 @@ export function RolePlayListPage() {
           </div>
         ) : (
           <p className="text-muted mb-0">
-            Bạn chưa thuộc project thu thập nào. Liên hệ admin để được thêm vào project.
+            Bạn chưa thuộc dự án thu thập nào. Liên hệ quản trị viên để được thêm vào dự án.
           </p>
         )}
       </div>
@@ -71,9 +71,9 @@ export function RolePlayListPage() {
     <div>
       <div className="d-flex align-items-center justify-content-between mb-4">
         <div>
-          <h2 className="mb-1">Role play</h2>
+          <h2 className="mb-1">Vai trò play</h2>
           <p className="text-muted mb-0">
-            Chọn task để nói chuyện với AI agent. Toàn bộ phiên sẽ được ghi âm.
+            Chọn nhiệm vụ để nói chuyện với AI agent. Toàn bộ phiên sẽ được ghi âm.
           </p>
         </div>
         <Link to="/roleplay/history" className="btn btn-outline-secondary btn-sm">

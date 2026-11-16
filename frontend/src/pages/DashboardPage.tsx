@@ -70,7 +70,7 @@ export function SectionHeader({ icon, title, subtitle }: { icon: string; title: 
   );
 }
 
-export function relativeTime(d: Date): string {
+function relativeTime(d: Date): string {
   const sec = Math.floor((Date.now() - d.getTime()) / 1000);
   if (sec < 5) return "vừa xong";
   if (sec < 60) return `${sec}s trước`;
@@ -140,8 +140,8 @@ function AnnotatorBreakdown({ overview }: { overview: AdminOverview }) {
   ];
   const rows: LegendRow[] = [
     { color: "#10b981", label: "Đang hoạt động", value: overview.annotators_active, total },
-    { color: "#f59e0b", label: "Đang review",    value: overview.annotators_under_review, total, hint: "Tự động flag do error rate" },
-    { color: "#ef4444", label: "Bị khoá",        value: overview.annotators_suspended, total, hint: "Không nhận task mới" },
+    { color: "#f59e0b", label: "Đang đang đánh giá",    value: overview.annotators_under_review, total, hint: "Tự động đánh dấu do tỷ lệ lỗi" },
+    { color: "#ef4444", label: "Bị khoá",        value: overview.annotators_suspended, total, hint: "Không nhận nhiệm vụ mới" },
   ];
 
   const activityPct = total > 0 ? (overview.annotators_active_last_7d / total) * 100 : 0;
@@ -152,7 +152,7 @@ function AnnotatorBreakdown({ overview }: { overview: AdminOverview }) {
         <DonutChart segments={segments} />
         <div className="breakdown-center">
           <div className="breakdown-total">{total}</div>
-          <div className="breakdown-total-label">annotator</div>
+          <div className="breakdown-total-label">người gán nhãn</div>
         </div>
       </div>
 
@@ -208,7 +208,7 @@ function AnnotationBreakdown({ overview }: { overview: AdminOverview }) {
   ];
   const rows: LegendRow[] = [
     { color: "#10b981", label: "Đã duyệt",    value: overview.annotations_approved, total, hint: "Score chính thức" },
-    { color: "#f59e0b", label: "Chờ review",  value: overview.annotations_pending,  total, hint: "Cần admin duyệt" },
+    { color: "#f59e0b", label: "Chờ đang đánh giá",  value: overview.annotations_pending,  total, hint: "Cần quản trị viên duyệt" },
     { color: "#ef4444", label: "Bị từ chối",  value: overview.annotations_rejected, total, hint: "Score = 0, clawback" },
   ];
 
@@ -272,17 +272,17 @@ function TopAnnotatorsCard({ items }: { items: TopAnnotator[] | undefined }) {
         <div>
           <div className="leaderboard-title">
             <i className="bi bi-trophy-fill"></i>
-            Top annotator
+            Dẫn đầu người gán nhãn
           </div>
           <div className="leaderboard-sub">Theo điểm chính thức</div>
         </div>
-        <span className="leaderboard-pill">Top {list.length || 5}</span>
+        <span className="leaderboard-pill">Dẫn đầu {list.length || 5}</span>
       </div>
 
       {list.length === 0 ? (
         <div className="leaderboard-empty">
           <i className="bi bi-people"></i>
-          <div>Chưa có annotation nào được duyệt</div>
+          <div>Chưa có bài gán nhãn nào được duyệt</div>
         </div>
       ) : (
         <ol className="leaderboard-list">
@@ -307,7 +307,7 @@ function TopAnnotatorsCard({ items }: { items: TopAnnotator[] | undefined }) {
                   <div className="leaderboard-meta">
                     <span><i className="bi bi-check2"></i> {u.count_approved} đã duyệt</span>
                     {u.count_reviewed > 0 && (
-                      <span>· acc {Math.round(u.accuracy * 100)}%</span>
+                      <span>· độ chính xác {Math.round(u.accuracy * 100)}%</span>
                     )}
                   </div>
                 </div>
@@ -323,7 +323,7 @@ function TopAnnotatorsCard({ items }: { items: TopAnnotator[] | undefined }) {
 export function DashboardPage() {
   const { user } = useAuth();
   if (!user) return null;
-  if (user.role === "admin") return <AdminDashboard fullName={user.full_name} />;
+  if (["admin", "reviewer"].includes(user.role)) return <AdminDashboard fullName={user.full_name} />;
 
   // Annotator: trang chính chỉ là Playground (random task).
   // Lịch sử / Điểm thưởng đã chuyển lên navbar.
@@ -337,15 +337,16 @@ function AdminDashboard({ fullName }: { fullName: string }) {
   const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
   const [, force] = useState(0);
 
-  const load = () => {
-    setLoading(true);
+  const loadOverview = () => {
     reviewApi.adminOverview()
       .then((d) => { setOverview(d); setError(null); setRefreshedAt(new Date()); })
       .catch((e) => setError(extractError(e, "Không tải được tổng quan")))
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, []);
+  const load = () => { setLoading(true); loadOverview(); };
+
+  useEffect(() => { loadOverview(); }, []);
 
   useEffect(() => {
     const t = setInterval(() => force((n) => n + 1), 15_000);
@@ -379,7 +380,7 @@ function AdminDashboard({ fullName }: { fullName: string }) {
           </div>
         </div>
         <Link to="/projects/new">
-          <Button variant="primary"><i className="bi bi-plus-lg me-2"></i>Tạo project</Button>
+          <Button variant="primary"><i className="bi bi-plus-lg me-2"></i>Tạo dự án</Button>
         </Link>
       </div>
 
@@ -395,9 +396,9 @@ function AdminDashboard({ fullName }: { fullName: string }) {
               <HighlightCard
                 tone="warning"
                 icon="bi-clipboard-check"
-                label="Annotation chờ review"
+                label="Bài gán nhãn chờ đang đánh giá"
                 value={overview.annotations_pending}
-                description="Duyệt sớm để annotator được trả điểm chính thức."
+                description="Duyệt sớm để người gán nhãn được trả điểm chính thức."
                 ctaText="Mở hàng đợi"
                 ctaTo="/admin/review"
               />
@@ -410,7 +411,7 @@ function AdminDashboard({ fullName }: { fullName: string }) {
                 value={overview.annotators_under_review}
                 description={
                   overview.annotators_under_review > 0
-                    ? "Có user vượt ngưỡng error rate — đang bị tự động flag."
+                    ? "Có người dùng vượt ngưỡng tỷ lệ lỗi — đang bị tự động đánh dấu."
                     : "Không có tài khoản nào bất thường — hệ thống ổn định."
                 }
                 ctaText="Xem chi tiết"
@@ -421,7 +422,7 @@ function AdminDashboard({ fullName }: { fullName: string }) {
 
           <SectionHeader
             icon="bi-people"
-            title="Annotator"
+            title="Người gán nhãn"
             subtitle="Phân bố theo trạng thái tài khoản"
           />
           <div className="mb-4">
@@ -433,14 +434,14 @@ function AdminDashboard({ fullName }: { fullName: string }) {
               <SectionHeader
                 icon="bi-soundwave"
                 title="Câu đã gán nhãn"
-                subtitle="Phân bố theo trạng thái review"
+                subtitle="Phân bố theo trạng thái đang đánh giá"
               />
               <AnnotationBreakdown overview={overview} />
             </Col>
             <Col lg={5}>
               <SectionHeader
                 icon="bi-trophy"
-                title="Top annotator"
+                title="Dẫn đầu người gán nhãn"
                 subtitle="Bảng xếp hạng theo điểm chính thức"
               />
               <TopAnnotatorsCard items={overview.top_annotators} />

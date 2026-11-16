@@ -1,3 +1,4 @@
+import { ResponsiveTable } from "../../components/ResponsiveTable";
 import { useState } from "react";
 import { useDemo } from "./context";
 import { eligible } from "./domain";
@@ -26,11 +27,15 @@ export function RewardsDemo() {
   const [appeal, setAppeal] = useState("");
   const [candidate, setCandidate] = useState("");
   const completed = state.sessions.filter(
-    (s) => s.owner === actor.id && s.state === "submitted",
+    (s) => s.owner === actor.id && s.state === "submitted" && (!state.gameServerEnabled || !!s.serverRevision),
   );
   const verified = state.contributions.filter(
     (c) => c.owner === actor.id && eligible(state, c),
   );
+  const accountKey = actor.id.replace(/^account:/, "");
+  const serverCounts = state.serverStats?.by_user?.[accountKey];
+  const completedCount = live ? serverCounts?.submitted_sessions ?? 0 : completed.length;
+  const verifiedCount = live ? serverCounts?.valid_samples ?? 0 : verified.length;
   const now = new Date().toISOString();
   const credits = state.credits.filter((c) => c.owner === actor.id);
   const balance = credits
@@ -51,18 +56,18 @@ export function RewardsDemo() {
           xuất token/API key.{" "}
           {live
             ? "Hạn mức, xác nhận tài khoản và khiếu nại lưu trên máy chủ; ví VND không bị tác động."
-            : "Tất cả trong trang này là demo."}
+            : "Tất cả trong trang này là minh họa."}
         </p>
       </Heading>
       <div className="demo-stat-grid">
         <Panel title="Lượt gửi hoàn tất">
-          <strong className="demo-number">{completed.length}</strong>
+          <strong className="demo-number">{completedCount}</strong>
         </Panel>
         <Panel title="Điểm tham gia minh họa">
-          <strong className="demo-number">{completed.length * 10}</strong>
-          <p>10 điểm/lượt, không đổi credit.</p>
+          <strong className="demo-number">{completedCount * 10}</strong>
+          <p>10 điểm/lượt, không đổi lượt sử dụng.</p>
         </Panel>
-        <Panel title="Streak hiện tại">
+        <Panel title={live ? "Chuỗi ngày trên thiết bị này" : "Chuỗi liên tiếp hiện tại"}>
           <strong className="demo-number">
             {streak(completed.map((s) => s.submittedAt!))}
           </strong>
@@ -70,17 +75,17 @@ export function RewardsDemo() {
         </Panel>
         <Panel title="Hạn mức còn dùng được">
           <strong className="demo-number">{balance}</strong>
-          <p>{live ? "Lượt AI nội bộ." : "Lượt AI nội bộ demo."}</p>
+          <p>{live ? "Lượt AI nội bộ." : "Lượt AI nội bộ minh họa."}</p>
         </Panel>
       </div>
       <div className="demo-two-col">
         <Panel title="Huy hiệu">
           <ul>
             <li>
-              {completed.length ? "Đã đạt" : "Chưa đạt"} · Lượt chơi đầu tiên
+              {completedCount ? "Đã đạt" : "Chưa đạt"} · Lượt chơi đầu tiên
             </li>
             <li>
-              {verified.length ? "Đã đạt" : "Chưa đạt"} · Đóng góp đủ QA/quyền
+              {verifiedCount ? "Đã đạt" : "Chưa đạt"} · Đóng góp đủ Kiểm tra chất lượng/quyền
             </li>
             <li>
               {streak(completed.map((s) => s.submittedAt!)) >= 3
@@ -99,12 +104,12 @@ export function RewardsDemo() {
             <li>
               {actor.role === "guest"
                 ? "Chưa có tài khoản"
-                : live ? "Có tài khoản" : "Có tài khoản demo"}
+                : live ? "Có tài khoản" : "Có tài khoản minh họa"}
             </li>
             <li>
-              {actor.verified ? (live ? "Đã xác nhận tài khoản" : "Đã xác nhận demo") : "Chờ xác nhận tài khoản"}
+              {actor.verified ? (live ? "Đã xác nhận tài khoản" : "Đã xác nhận minh họa") : "Chờ xác nhận tài khoản"}
             </li>
-            <li>{verified.length} mẫu đủ QA/consent/quyền</li>
+            <li>{verifiedCount} mẫu đủ Kiểm tra chất lượng/phạm vi đồng ý/quyền</li>
             <li>
               {actor.risk === "clear"
                 ? "Không tạm giữ rủi ro"
@@ -112,17 +117,17 @@ export function RewardsDemo() {
             </li>
             <li>
               {state.rewardEnabled
-                ? live ? "Chính sách hạn mức đang bật" : "Đã bật chính sách demo"
+                ? live ? "Chính sách hạn mức đang bật" : "Đã bật chính sách minh họa"
                 : "Chính sách chưa bật"}
             </li>
           </ol>
           <p>
-            Chỉ admin cấp: 5 lượt/mẫu mới không trùng, tối đa 4 lần cấp/ngày,
+            Chỉ quản trị viên cấp: 5 lượt/mẫu mới không trùng, tối đa 4 lần cấp/ngày,
             hết hạn sau 30 ngày; không tự cấp khi đăng ký/chơi.
           </p>
         </Panel>
       </div>
-      {!live && <Panel title="Tạo tài khoản DEMO tùy chọn">
+      {!live && <Panel title="Tạo tài khoản Minh họa tùy chọn">
         <p>
           Không đăng ký tài khoản thật, không yêu cầu mật khẩu hoặc thông tin cá
           nhân.
@@ -142,15 +147,16 @@ export function RewardsDemo() {
             setName("");
           }}
         >
-          Tạo tài khoản demo · 0 credit
+          Tạo tài khoản minh họa · 0 lượt sử dụng
         </Action>
       </Panel>}
-      <Panel title="Bảng xếp hạng minh họa">
-        <div className="demo-table-scroll">
+      <Panel title={live ? "Thống kê tham gia trên máy chủ" : "Bảng xếp hạng minh họa"}>
+        {live && <p className="demo-note">{state.serverStats?.definitions.submitted_sessions} {state.serverStats?.definitions.coverage}</p>}
+        <ResponsiveTable>
           <table>
             <thead>
               <tr>
-                <th>Tên hiển thị demo</th>
+                <th>Tên hiển thị</th>
                 <th>Lượt hoàn tất</th>
                 <th>Mẫu đủ chất lượng</th>
                 <th>Điểm tham gia</th>
@@ -158,13 +164,13 @@ export function RewardsDemo() {
             </thead>
             <tbody>
               {state.people
-                .filter((p) => p.role === "contributor")
+                .filter((p) => p.role === "contributor" && (!live || !!state.serverStats?.by_user?.[p.id.replace(/^account:/, "")]))
                 .map((p) => ({
                   p,
-                  count: state.sessions.filter(
+                  count: live ? state.serverStats?.by_user?.[p.id.replace(/^account:/, "")]?.submitted_sessions ?? 0 : state.sessions.filter(
                     (s) => s.owner === p.id && s.state === "submitted",
                   ).length,
-                  qa: state.contributions.filter(
+                  qa: live ? state.serverStats?.by_user?.[p.id.replace(/^account:/, "")]?.valid_samples ?? 0 : state.contributions.filter(
                     (c) => c.owner === p.id && eligible(state, c),
                   ).length,
                 }))
@@ -179,10 +185,10 @@ export function RewardsDemo() {
                 ))}
             </tbody>
           </table>
-        </div>
+        </ResponsiveTable>
       </Panel>
-      {actor.role === "admin" && (
-        <Panel title={live ? "Chính sách & cấp hạn mức" : "Duyệt cơ chế & cấp hạn mức DEMO"}>
+      {["admin", "reviewer"].includes(actor.role) && (
+        <Panel title={live ? "Chính sách & cấp hạn mức" : "Duyệt cơ chế & cấp hạn mức Minh họa"}>
           <label className="demo-checkbox">
             <input
               type="checkbox"
@@ -207,7 +213,7 @@ export function RewardsDemo() {
               {state.contributions.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.raw.text} · {c.owner} ·{" "}
-                  {eligible(state, c) ? "Đủ QA" : "Chưa đủ QA"}
+                  {eligible(state, c) ? "Đủ Kiểm tra chất lượng" : "Chưa đủ Kiểm tra chất lượng"}
                 </option>
               ))}
             </select>
@@ -223,13 +229,13 @@ export function RewardsDemo() {
               });
             }}
           >
-            Xét điều kiện & cấp 5 lượt demo
+            Xét điều kiện & cấp 5 lượt minh họa
           </Action>
           <p>
             Quản lý xác nhận tài khoản và rủi ro tại Vùng / nguồn / người. Mọi
             lần từ chối có thông báo điều kiện.
           </p>
-          <div className="demo-table-scroll">
+          <ResponsiveTable>
             <table>
               <thead>
                 <tr>
@@ -259,7 +265,7 @@ export function RewardsDemo() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ResponsiveTable>
         </Panel>
       )}
       <Panel title="Lịch sử hạn mức của tôi">
@@ -276,7 +282,7 @@ export function RewardsDemo() {
         {!credits.length && (
           <p>
             Chưa có hạn mức được cấp. Tạo nhiều tài khoản hoặc chơi nhiều lượt
-            không tự tạo credit.
+            không tự tạo lượt sử dụng.
           </p>
         )}
       </Panel>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Modal, Button, Form, Alert } from "react-bootstrap";
 import { audiosApi } from "../../api/audios";
 import { extractError } from "../../api/client";
@@ -23,7 +23,7 @@ interface Field {
 
 const FIELDS_BY_TASK: Record<TaskType, Field[]> = {
   audio_label: [
-    { key: "prelabel", label: "Transcript đúng (ground truth)", placeholder: "Nhập transcript đúng...", multiline: true, required: true },
+    { key: "prelabel", label: "Bản chép lời đúng (đáp án chuẩn)", placeholder: "Nhập bản chép lời đúng...", multiline: true, required: true },
   ],
   audio_verify: [
     { key: "suggested_label", label: "Nhãn đúng", placeholder: "VD: xin chào", required: true },
@@ -31,7 +31,7 @@ const FIELDS_BY_TASK: Record<TaskType, Field[]> = {
   qa: [
     { key: "question", label: "Câu hỏi", placeholder: "VD: Người nói là nam hay nữ?", required: true },
     { key: "options", label: "Lựa chọn (cách nhau bởi |)", placeholder: "Nam|Nữ|Không rõ" },
-    { key: "answer", label: "Đáp án đúng (ground truth)", placeholder: "VD: Nam", required: true },
+    { key: "answer", label: "Đáp án đúng (đáp án chuẩn)", placeholder: "VD: Nam", required: true },
   ],
 };
 
@@ -40,19 +40,17 @@ export function EditLabelModal({ show, onHide, projectId, item, onSaved }: EditL
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!item) {
-      setValues({});
-      return;
-    }
+  const [previousItem, setPreviousItem] = useState<AudioItem | null>(null);
+  if (previousItem !== item) {
+    setPreviousItem(item);
     const init: Record<string, string> = {};
-    for (const f of FIELDS_BY_TASK[item.task_type] ?? []) {
-      const v = item.payload?.[f.key];
-      init[f.key] = typeof v === "string" ? v : "";
+    if (item) for (const f of FIELDS_BY_TASK[item.task_type] ?? []) {
+      const value = item.payload?.[f.key];
+      init[f.key] = typeof value === "string" ? value : "";
     }
     setValues(init);
     setError(null);
-  }, [item]);
+  }
 
   if (!item) return null;
   const fields = FIELDS_BY_TASK[item.task_type] ?? [];
@@ -84,7 +82,7 @@ export function EditLabelModal({ show, onHide, projectId, item, onSaved }: EditL
       <Modal.Header closeButton>
         <Modal.Title>
           <i className="bi bi-pencil-square me-2 text-primary"></i>
-          Sửa nhãn ground truth
+          Sửa nhãn đáp án chuẩn
         </Modal.Title>
       </Modal.Header>
       <Modal.Body>
@@ -127,7 +125,7 @@ export function EditLabelModal({ show, onHide, projectId, item, onSaved }: EditL
 
         <Alert variant="warning" className="py-2 small mb-0">
           <i className="bi bi-exclamation-triangle me-1"></i>
-          Lưu sẽ <strong>ghi đè</strong> nhãn hiện có (force update).
+          Lưu sẽ <strong>ghi đè</strong> nhãn hiện có (ghi đè dữ liệu).
         </Alert>
 
         {error && <Alert variant="danger" className="py-2 mt-3 mb-0">{error}</Alert>}

@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
+import { displayLabel } from "../../lib/display";
+import { useState, useMemo } from "react";
 import { Modal, Button, Form, Alert, InputGroup, Dropdown } from "react-bootstrap";
 import { audiosApi } from "../../api/audios";
 import { extractError } from "../../api/client";
@@ -9,9 +10,9 @@ type TemplateFormat = "csv" | "tsv" | "jsonl" | "json" | "xlsx";
 
 const TEMPLATE_FORMATS: { key: TemplateFormat; label: string; icon: string; desc: string }[] = [
   { key: "csv",   label: "CSV",   icon: "bi-filetype-csv",   desc: "Mở bằng Excel / Google Sheets" },
-  { key: "xlsx",  label: "Excel", icon: "bi-file-earmark-excel", desc: ".xlsx — định dạng Excel native" },
-  { key: "tsv",   label: "TSV",   icon: "bi-table",          desc: "Tab-separated, dễ paste vào sheet" },
-  { key: "jsonl", label: "JSONL", icon: "bi-filetype-json",  desc: "Mỗi dòng là 1 JSON object" },
+  { key: "xlsx",  label: "Excel", icon: "bi-file-earmark-excel", desc: ".xlsx — định dạng Excel gốc" },
+  { key: "tsv",   label: "TSV",   icon: "bi-table",          desc: "Các cột cách nhau bằng dấu tab, dễ dán vào bảng tính" },
+  { key: "jsonl", label: "JSONL", icon: "bi-filetype-json",  desc: "Mỗi dòng là 1 đối tượng JSON" },
   { key: "json",  label: "JSON",  icon: "bi-braces",         desc: "1 mảng JSON hoàn chỉnh" },
 ];
 
@@ -82,7 +83,9 @@ export function UploadLabelsModal({
   const [result, setResult] = useState<PrelabelApplyResponse | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
+  const [wasShown, setWasShown] = useState(show);
+  if (wasShown !== show) {
+    setWasShown(show);
     if (!show) {
       setFile(null);
       setError(null);
@@ -90,14 +93,14 @@ export function UploadLabelsModal({
       setBusy(false);
       setSelected(new Set());
     }
-  }, [show]);
+  }
 
   const meta = TASK_TYPE_LABELS[taskType];
   const variant = isGolden ? "golden" : "normal";
   const headers = HEADERS_BY_TASK[taskType][variant];
   const example = EXAMPLE_BY_TASK[taskType][variant];
   const formatPreview = `${headers.join(",")}\n${example.join(",")}`;
-  const conflicts: PrelabelConflictItem[] = result?.conflicts ?? [];
+  const conflicts: PrelabelConflictItem[] = useMemo(() => result?.conflicts ?? [], [result]);
   const hasConflicts = conflicts.length > 0;
 
   const [downloading, setDownloading] = useState<TemplateFormat | null>(null);
@@ -178,7 +181,7 @@ export function UploadLabelsModal({
       setSelected(new Set());
       onApplied();
     } catch (e) {
-      setError(extractError(e, "Force update thất bại"));
+      setError(extractError(e, "Ghi đè dữ liệu thất bại"));
     } finally {
       setBusy(false);
     }
@@ -194,14 +197,14 @@ export function UploadLabelsModal({
       <Modal.Header closeButton>
         <Modal.Title>
           <i className="bi bi-filetype-csv me-2 text-primary"></i>
-          Upload nhãn hàng loạt
+          Tải lên nhãn hàng loạt
         </Modal.Title>
       </Modal.Header>
       <Modal.Body>
         <div className="mb-3 small text-muted">
           <i className={`bi ${meta.icon} me-1`}></i>
           <strong>{meta.title}</strong>
-          {isGolden && <span className="ms-2 badge bg-warning text-dark">Golden</span>}
+          {isGolden && <span className="ms-2 badge bg-warning text-dark">Mẫu kiểm tra chuẩn</span>}
         </div>
 
         {!result && (
@@ -209,8 +212,8 @@ export function UploadLabelsModal({
             <Alert variant={isGolden ? "warning" : "info"} className="py-2 small">
               <i className={`bi ${isGolden ? "bi-exclamation-triangle" : "bi-info-circle"} me-1`}></i>
               {isGolden
-                ? <>File này sẽ <strong>ghi đè</strong> nhãn hiện có khi tên file trùng (force update).</>
-                : <>Hệ thống sẽ <strong>merge</strong> nhãn vào những file chưa có. Nếu phát hiện file đã có nhãn khác, sẽ liệt kê để bạn xác nhận force update.</>
+                ? <>Tệp này sẽ <strong>ghi đè</strong> nhãn hiện có khi tên tệp trùng (ghi đè dữ liệu).</>
+                : <>Hệ thống sẽ <strong>gộp</strong> nhãn vào những tệp chưa có. Nếu phát hiện tệp đã có nhãn khác, sẽ liệt kê để bạn xác nhận ghi đè dữ liệu.</>
               }
             </Alert>
 
@@ -259,7 +262,7 @@ export function UploadLabelsModal({
             {filenames && filenames.length > 0 ? (
               <div className="small text-muted mb-3">
                 <i className="bi bi-info-circle me-1"></i>
-                Template tải về đã <strong>điền sẵn {filenames.length} tên file</strong> đang có — bạn chỉ cần điền cột nhãn rồi upload lại.
+                Template tải về đã <strong>điền sẵn {filenames.length} tên tệp</strong> đang có — bạn chỉ cần điền cột nhãn rồi tải lên lại.
               </div>
             ) : (
               <div className="small text-muted mb-3">
@@ -292,8 +295,8 @@ export function UploadLabelsModal({
           <>
             <Alert variant={result.applied > 0 ? "success" : "secondary"} className="py-2 small">
               <i className="bi bi-check-circle-fill me-1"></i>
-              Đã áp dụng <strong>{result.applied}</strong> file
-              {result.unmatched > 0 && <> · <span className="text-muted">{result.unmatched} dòng không khớp tên file</span></>}
+              Đã áp dụng <strong>{result.applied}</strong> tệp
+              {result.unmatched > 0 && <> · <span className="text-muted">{result.unmatched} dòng không khớp tên tệp</span></>}
             </Alert>
 
             {hasConflicts && (
@@ -302,10 +305,10 @@ export function UploadLabelsModal({
                   <div>
                     <div className="conflict-title">
                       <i className="bi bi-exclamation-octagon-fill text-warning me-2"></i>
-                      {conflicts.length} file đang có nhãn khác
+                      {conflicts.length} tệp đang có nhãn khác
                     </div>
                     <div className="conflict-sub">
-                      Tích chọn các dòng muốn <strong>ghi đè</strong> rồi bấm "Force update". Các dòng không tích sẽ giữ nhãn cũ.
+                      Tích chọn các dòng muốn <strong>ghi đè</strong> rồi bấm "Ghi đè dữ liệu". Các dòng không tích sẽ giữ nhãn cũ.
                     </div>
                   </div>
                   <button
@@ -323,7 +326,7 @@ export function UploadLabelsModal({
                     <thead>
                       <tr>
                         <th style={{ width: 40 }}></th>
-                        <th>File</th>
+                        <th>Tệp</th>
                         <th>Giá trị hiện tại</th>
                         <th>Giá trị mới</th>
                       </tr>
@@ -352,7 +355,7 @@ export function UploadLabelsModal({
                             <td>
                               {Object.entries(c.current).map(([k, v]) => (
                                 <div key={k} className="conflict-kv">
-                                  <span className="conflict-key">{k}:</span>
+                                  <span className="conflict-key">{displayLabel(k, "Thuộc tính")}:</span>
                                   <span className="conflict-val-old">{formatValue(v)}</span>
                                 </div>
                               ))}
@@ -360,7 +363,7 @@ export function UploadLabelsModal({
                             <td>
                               {Object.entries(c.new).map(([k, v]) => (
                                 <div key={k} className="conflict-kv">
-                                  <span className="conflict-key">{k}:</span>
+                                  <span className="conflict-key">{displayLabel(k, "Thuộc tính")}:</span>
                                   <span className="conflict-val-new">{formatValue(v)}</span>
                                 </div>
                               ))}
@@ -377,7 +380,7 @@ export function UploadLabelsModal({
             {result.unmatched_filenames.length > 0 && (
               <Alert variant="warning" className="py-2 small mt-3 mb-0">
                 <i className="bi bi-question-circle me-1"></i>
-                <strong>{result.unmatched}</strong> filename trong file không khớp với audio nào trong dataset:
+                <strong>{result.unmatched}</strong> filename trong tệp không khớp với âm thanh nào trong bộ dữ liệu:
                 <div className="mt-1 small text-muted" style={{ maxHeight: 80, overflow: "auto" }}>
                   {result.unmatched_filenames.slice(0, 20).join(", ")}
                   {result.unmatched_filenames.length > 20 && ` ... +${result.unmatched_filenames.length - 20}`}
@@ -408,8 +411,8 @@ export function UploadLabelsModal({
             disabled={busy || !someSelected}
           >
             {busy
-              ? <><span className="spinner-border spinner-border-sm me-2"></span>Đang force update...</>
-              : <><i className="bi bi-arrow-clockwise me-2"></i>Force update {selected.size > 0 && <>({selected.size})</>}</>
+              ? <><span className="spinner-border spinner-border-sm me-2"></span>Đang ghi đè dữ liệu...</>
+              : <><i className="bi bi-arrow-clockwise me-2"></i>Ghi đè dữ liệu {selected.size > 0 && <>({selected.size})</>}</>
             }
           </Button>
         )}

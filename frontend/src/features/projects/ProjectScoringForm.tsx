@@ -33,7 +33,7 @@ export function ProjectScoringForm({ state, onChange, disabled }: ProjectScoring
             Nhiệm vụ
           </h5>
           <p className="text-muted small mb-0">
-            Chọn các loại nhiệm vụ project sẽ gán và đặt điểm thưởng cho mỗi loại.
+            Chọn các loại nhiệm vụ dự án sẽ gán và đặt điểm thưởng cho mỗi loại.
             Phải bật ít nhất 1 nhiệm vụ.
           </p>
         </div>

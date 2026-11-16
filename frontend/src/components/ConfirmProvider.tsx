@@ -1,22 +1,8 @@
-import { createContext, useCallback, useContext, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Modal, Button } from "react-bootstrap";
 
-type Variant = "danger" | "warning" | "primary";
-
-interface ConfirmOptions {
-  title?: string;
-  message: ReactNode;
-  confirmText?: string;
-  cancelText?: string;
-  variant?: Variant;
-  icon?: string;
-}
-
-type ConfirmFn = (opts: ConfirmOptions) => Promise<boolean>;
-
-const ConfirmContext = createContext<ConfirmFn | undefined>(undefined);
-
+import { ConfirmContext, type ConfirmOptions, type ConfirmFn, type Variant } from "./useConfirm";
 interface DialogState extends ConfirmOptions {
   show: boolean;
 }
@@ -91,10 +77,4 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
       </Modal>
     </ConfirmContext.Provider>
   );
-}
-
-export function useConfirm(): ConfirmFn {
-  const ctx = useContext(ConfirmContext);
-  if (!ctx) throw new Error("useConfirm must be used inside ConfirmProvider");
-  return ctx;
 }

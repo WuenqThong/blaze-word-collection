@@ -16,7 +16,7 @@ function finish(input: DemoState, id: string) {
   let s = input;
   for (let i = 0; i < 10; i++) {
     const q = s.sessions.find((x) => x.id === id)!.questions[i];
-    s = applyCommand(s, { type: "answer", id, index: i, next: i + 1, answer: { ...blankAnswer(), text: q.accepted[0] ?? `Trả lời ${i}`, selectedOptionId: q.correctOptionId, meaning: `Nghĩa ${i}`, standard: `Phổ thông ${i}`, context: `Ngữ cảnh ${i}` } });
+    s = applyCommand(s, { type: "answer", id, index: i, next: i + 1, answer: { ...blankAnswer(), originalText: "Cách nói địa phương thử nghiệm", text: q.accepted[0] ?? `Trả lời ${i}`, selectedOptionId: q.correctOptionId, meaning: `Nghĩa ${i}`, standard: `Phổ thông ${i}`, context: `Ngữ cảnh ${i}` } });
   }
   return applyCommand(s, { type: "submit", id, region: "Quảng Nam", upbringing: "Quảng Nam", usage: "" });
 }
@@ -34,19 +34,45 @@ describe("Dataset1 question bank", () => {
     for (let index = 0; index < 2; index++) {
       const question = state.sessions[0].questions[index];
       if (index === 1) {
-        state = applyCommand(state, { type: "answer", id: "gate", index, next: 2, answer: { ...blankAnswer(), text: "sai đáp án" } });
+        state = applyCommand(state, { type: "answer", id: "gate", index, next: 2, answer: { ...blankAnswer(), originalText: "Cách nói địa phương thử nghiệm", text: "sai đáp án" } });
         expect(canAdvance(state.sessions[0], 2)).toBe(false);
       }
       state = applyCommand(state, { type: "answer", id: "gate", index, next: index + 1,
-        answer: { ...blankAnswer(), text: question.accepted[0] ?? "đáp án", selectedOptionId: question.correctOptionId } });
+        answer: { ...blankAnswer(), originalText: "Cách nói địa phương thử nghiệm", text: question.accepted[0] ?? "đáp án", selectedOptionId: question.correctOptionId } });
     }
     expect(canAdvance(state.sessions[0], 2)).toBe(true);
     expect(state.sessions[0].questions[2].format).toBe("open");
-    state = applyCommand(state, { type: "answer", id: "gate", index: 2, next: 3, answer: { ...blankAnswer(), text: "Cách nói của tôi" } });
+    state = applyCommand(state, { type: "answer", id: "gate", index: 2, next: 3, answer: { ...blankAnswer(), originalText: "Cách nói địa phương thử nghiệm", text: "Cách nói của tôi" } });
     expect(state.sessions[0].cursor).toBe(3);
   });
+  it.each(["", "biến thể tôi đề xuất"])("lets the fourth wrong gate answer through as a held proposal: %s", (suggestion) => {
+    let state = applyCommand(only(seed(), "dataset1-bank-01"), { type: "start", id: "proposal", examId: "dataset1-bank-01", consent, campaignId: "" });
+    const first = state.sessions[0].questions[0];
+    const snapshot = structuredClone(state.sessions[0].questions);
+    state = applyCommand(state, { type: "answer", id: "proposal", index: 0, next: 1, answer: { ...blankAnswer(), originalText: "Cách nói địa phương thử nghiệm", selectedOptionId: first.correctOptionId, text: "đáp án" } });
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      state = applyCommand(state, { type: "answer", id: "proposal", index: 1, next: 2, answer: { ...blankAnswer(), originalText: "Cách nói địa phương thử nghiệm", text: "cách nói khác", suggestion, attempts: Array(20).fill({ text: "giả", correct: false, at: "" }) } });
+      const session = state.sessions[0];
+      expect(session.answers[1].attempts).toHaveLength(attempt);
+      expect(session.answers[1].attempts.at(-1)!.correct).toBe(false);
+      expect(canAdvance(session, 2)).toBe(attempt === 4);
+      expect(session.cursor).toBe(attempt === 4 ? 2 : 1);
+    }
+    expect(state.sessions[0].answers[1].attempts.at(-1)!.proposal).toBe(suggestion || "cách nói khác");
+    state = applyCommand(state, { type: "draftAnswer", id: "proposal", index: 1, answer: { ...state.sessions[0].answers[1], text: "nháp sửa" } });
+    expect(canAdvance(state.sessions[0], 2)).toBe(false);
+    state = applyCommand(state, { type: "answer", id: "proposal", index: 1, next: 2, answer: { ...blankAnswer(), originalText: "Cách nói địa phương thử nghiệm", text: "cách nói khác", suggestion } });
+    for (let index = 2; index < 10; index++) state = applyCommand(state, { type: "answer", id: "proposal", index, next: index + 1, answer: { ...blankAnswer(), originalText: "Cách nói địa phương thử nghiệm", text: `Nội dung ${index}`, meaning: "Nghĩa", standard: "Phổ thông", context: "Ngữ cảnh" } });
+    state = applyCommand(state, { type: "submit", id: "proposal", region: "Quảng Nam", upbringing: "Quảng Nam", usage: "" });
+    const proposal = state.contributions.find(c => c.id === "proposal:q2")!;
+    expect(proposal.status).toBe("HOLD");
+    expect(proposal.raw.text).toBe(snapshot[1].originalText);
+    expect(proposal.raw.standard).toBe(suggestion || "cách nói khác");
+    expect(proposal.raw.evidence).toContain("Đề xuất đáp án mới");
+    expect(state.sessions[0].questions).toEqual(snapshot);
+  });
   it("migrates existing bank exams once without changing session snapshots or consent", () => {
-    let state = applyCommand(only(seed(), "dataset1-bank-01"), { type: "start", id: "old", examId: "dataset1-bank-01", consent, campaignId: "" });
+    const state = applyCommand(only(seed(), "dataset1-bank-01"), { type: "start", id: "old", examId: "dataset1-bank-01", consent, campaignId: "" });
     state.installedPacks = state.installedPacks?.filter((id) => id !== "dataset1-strict-gates-v1");
     state.exams.find((e) => e.id === "dataset1-bank-01")!.mode = "signal";
     state.sessions[0].exam.mode = "signal";
@@ -104,6 +130,14 @@ describe("Dataset1 question bank", () => {
     expect(samples.map((c) => c.id)).toEqual([3, 4, 5, 6, 7, 8, 9, 10].map((n) => `p:q${n}`));
     expect(samples.every((c) => c.sourceId === UNVERIFIED_SOURCE && c.status === "RAW")).toBe(true);
     expect(samples.filter((c) => c.raw.kind === "sentence").map((c) => c.id)).toEqual(["p:q6", "p:q7", "p:q10"]);
+    for (const sample of samples) {
+      const i = Number(sample.id.split("q").at(-1)) - 1;
+      const question = s.sessions[0].questions[i];
+      const answer = s.sessions[0].answers[i];
+      expect(sample.raw.text).toBe(question.kind.startsWith("OPEN_") ? answer.originalText : question.originalText);
+      expect(sample.raw.standard).toBe(answer.standard);
+      expect(sample.raw.text).not.toBe(answer.text);
+    }
     const row = s.sessions[0].questions[2].provenance!.rowId;
     expect(samples[0].raw.evidence).toContain(`Dataset1 ${row} (chưa kiểm chứng)`);
     expect(s.sessions[0].answers.slice(0, 2).every((a) => a.attempts[0].correct === true)).toBe(true);

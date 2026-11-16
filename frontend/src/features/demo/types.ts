@@ -19,6 +19,8 @@ export interface Person {
   appeal: string;
 }
 export interface Question {
+  originalText?: string;
+  serverRevision?: number;
   format?: "choice" | "short" | "fill" | "open";
   options?: { id: string; text: string }[];
   correctOptionId?: string;
@@ -37,6 +39,7 @@ export interface Question {
   difficulty: number;
 }
 export interface Exam {
+  serverRevision?: number;
   id: string;
   version: number;
   title: string;
@@ -51,17 +54,28 @@ export interface Exam {
   layout?: "classic" | "sourced2";
 }
 export interface Answer {
+  originalText?: string;
   selectedOptionId?: string;
   text: string;
   meaning: string;
   standard: string;
   context: string;
   skipped: boolean;
-  attempts: { text: string; selectedOptionId?: string; correct: boolean | null; at: string }[];
+  attempts: { text: string; selectedOptionId?: string; correct: boolean | null; at: string; proposal?: string }[];
   suggestion: string;
   updatedAt: string;
 }
 export interface Session {
+  serverRevision?: number;
+  serverPending?: { key: string; expectedRevision: number; command: Command; sent?: boolean }[];
+  serverViewKey?: string;
+  allowedRegions?: string[];
+  serverConflict?: Session;
+  serverSyncError?: string;
+  serverValidationError?: boolean;
+  localBackups?: { at: string; commands: NonNullable<Session["serverPending"]> }[];
+  serverAllocated?: boolean;
+  receipts?: Partial<Record<"started" | "submitted" | "withdraw", { done?: boolean; reason?: string; attempts?: number }>>;
   testOnly?: boolean;
   repeat?: boolean;
   id: string;
@@ -81,6 +95,8 @@ export interface Session {
   campaignId: string;
 }
 export interface Raw {
+  questionKind?: string;
+  questionFormat?: Question["format"];
   kind: "word" | "sentence";
   text: string;
   meaning: string;
@@ -99,6 +115,8 @@ export interface Raw {
   mediaIds: string[];
 }
 export interface Contribution {
+  qualityReasons?: string[];
+  sync?: { status: "pending" | "rejected" | "retry" | "accepted" | "discarded"; approved: boolean; attempts: number; reason?: string; attemptedAt?: string; payload?: Record<string, unknown> };
   duplicateOf?: string;
   id: string;
   owner: string;
@@ -124,6 +142,7 @@ export interface Vote {
   at: string;
 }
 export interface Source {
+  serverRevision?: number;
   id: string;
   title: string;
   evidence: string;
@@ -133,6 +152,7 @@ export interface Source {
   demo: boolean;
 }
 export interface Campaign {
+  serverRevision?: number;
   id: string;
   title: string;
   examIds: string[];
@@ -142,6 +162,7 @@ export interface Campaign {
   mode: "standard" | "adaptive" | "cross_region" | "generation";
 }
 export interface Task {
+  serverRevision?: number;
   id: string;
   title: string;
   method: string;
@@ -186,6 +207,7 @@ export interface Job {
   at: string;
 }
 export interface Release {
+  previewDigest?: string;
   id: string;
   ids: string[];
   records: { id: string; raw: Raw; split: "train" | "dev" | "test" }[];
@@ -211,6 +233,13 @@ export interface ModelVersion {
   active: boolean;
 }
 export interface DemoState {
+  gameServerEnabled?: boolean;
+  catalogRevisions?: Record<string, number>;
+  catalogBackups?: { at: string; owner: string; questions: Question[]; exams: Exam[]; campaigns: Campaign[]; tasks: Task[]; regions: string[]; topics: string[]; sources?: Source[] }[];
+
+  serverAccountId?: number;
+  serverEnvironment?: { label: string; id: string };
+  serverStats?: { started_sessions: number; submitted_sessions: number; withdrawn_sessions: number; valid_samples: number; held_samples?: number; rejected_samples?: number; by_user?: Record<string, { started_sessions: number; submitted_sessions: number; withdrawn_sessions: number; valid_samples: number }>; coverage_since?: string; definitions: Record<string, string> };
   installedPacks?: string[];
   schema: 1;
   models: ModelVersion[];
@@ -239,6 +268,7 @@ export interface DemoState {
   backupAt: string | null;
 }
 export type Command =
+  | { type: "resolveGameConflict"; id: string; choice: "server" | "local" }
   | { type: "autoStart"; consent: Consent; campaignId: string; id: string; /** Đề do server chọn; bỏ qua nếu không còn trong pool. */ examId?: string }
   | { type: "actor"; id: string }
   | { type: "simulate"; value: DemoState["simulate"] }
@@ -293,8 +323,8 @@ export type Command =
   | { type: "source"; source: Source }
   | { type: "campaign"; campaign: Campaign }
   | { type: "task"; task: Task }
-  | { type: "person"; person: Person }
-  | { type: "taxonomy"; regions: string[]; topics: string[] }
+  | { type: "person"; person: Person; expected?: Person }
+  | { type: "taxonomy"; regions: string[]; topics: string[]; expectedRevision?: number }
   | { type: "feedback"; entity: string; text: string }
   | { type: "resolve"; id: string }
   | { type: "grant"; owner: string; contributionId: string }

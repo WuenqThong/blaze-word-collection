@@ -51,7 +51,7 @@ describe("player to admin integration using actual routes and IndexedDB", () => 
     expect((await repository().load()).sessions).toHaveLength(0);
     await user.click(screen.getByLabelText(/Cho phép sử dụng dữ liệu để huấn luyện/));
     await user.click(start);
-    await screen.findByRole("heading", { name: "Q01 / 10" });
+    await screen.findByRole("heading", { name: "Câu 1 / 10" });
     expect((await repository().load()).sessions).toHaveLength(1);
   });
 
@@ -64,7 +64,7 @@ describe("player to admin integration using actual routes and IndexedDB", () => 
     await screen.findByRole("heading", { name: /Tiếng quê mình/ }, { timeout: 5000 });
     await user.click(
       within(screen.getByRole("main")).getByRole("link", {
-        name: /Chơi game 10 câu/,
+        name: /Chơi trò chơi 10 câu/,
       }),
     );
     await screen.findByRole("heading", { name: /Mười câu hỏi/ });
@@ -73,7 +73,7 @@ describe("player to admin integration using actual routes and IndexedDB", () => 
     await user.click(
       screen.getByRole("button", { name: /Bắt đầu chơi/ }),
     );
-    await screen.findByRole("heading", { name: "Q01 / 10" });
+    await screen.findByRole("heading", { name: "Câu 1 / 10" });
     fireEvent.change(screen.getByLabelText("Cách nói phổ thông *"), {
       target: { value: "Nháp phục hồi" },
     });
@@ -82,16 +82,17 @@ describe("player to admin integration using actual routes and IndexedDB", () => 
         screen.getByRole("button", { name: "Lưu & tiếp tục" }),
       ).toBeEnabled(),
     );
+    await waitFor(async () => expect((await repository().load()).sessions.at(-1)?.answers[0].text).toBe("Nháp phục hồi"));
     const route = view.router.state.location.pathname;
     view.unmount();
     const resumed = app(route);
-    await screen.findByRole("heading", { name: "Q01 / 10" });
+    await screen.findByRole("heading", { name: "Câu 1 / 10" });
     expect(screen.getByLabelText("Cách nói phổ thông *")).toHaveValue(
       "Nháp phục hồi",
     );
     for (let i = 0; i < 10; i++) {
       await screen.findByRole("heading", {
-        name: `Q${String(i + 1).padStart(2, "0")} / 10`,
+        name: `Câu ${i + 1} / 10`,
       });
       if (i === 2) {
         await user.click(
@@ -104,9 +105,10 @@ describe("player to admin integration using actual routes and IndexedDB", () => 
       });
       if (i >= 8) {
         for (const label of [
-          "Nghĩa bạn muốn giải thích *",
+          "Cách nói địa phương *",
+          "Giải thích *",
           "Cách nói phổ thông *",
-          "Ví dụ / ngữ cảnh *",
+
         ])
           fireEvent.change(screen.getByLabelText(label), {
             target: { value: `Nội dung ${i + 1}` },
@@ -144,7 +146,7 @@ describe("player to admin integration using actual routes and IndexedDB", () => 
     expect(state.credits).toHaveLength(0);
     await resumed.router.navigate("/demo/internal");
     await screen.findByRole("heading", { name: "Thử nghiệm nội bộ" });
-    await user.selectOptions(screen.getByLabelText("Vai trò DEMO"), "admin");
+    await user.selectOptions(screen.getByLabelText("Vai trò Minh họa"), "admin");
     await resumed.router.navigate(`/demo/admin/sessions/${state.sessions[0].id}`);
     await screen.findByRole("heading", {
       name: "Lượt chơi & từng câu trả lời",
@@ -186,7 +188,7 @@ describe("player to admin integration using actual routes and IndexedDB", () => 
         expect(
           within(screen.getByRole("main")).getAllByRole("heading", { level: 1 })
             .length,
-        ).toBeGreaterThan(0),
+        ).toBeGreaterThan(0), { timeout: 5000, onTimeout: error => new Error(`${path}: ${error.message}`) },
       );
       expect(
         screen.queryByText(/Unexpected Application Error/),
@@ -197,7 +199,7 @@ describe("player to admin integration using actual routes and IndexedDB", () => 
   it("shows denied management access to a contributor", async () => {
     vi.mocked(authApi.me).mockResolvedValue({ id: 102, email: "member@example.com", full_name: "Người tham gia", role: "annotator", created_at: "2026-11-05T00:00:00Z", last_login_at: null });
     app("/demo/admin/exams");
-    await screen.findByRole("heading", { name: "Cần đổi vai trò demo" });
+    await screen.findByRole("heading", { name: "Cần đổi vai trò minh họa" });
     expect(
       screen.queryByRole("button", { name: "Tạo bộ đề 10 câu" }),
     ).not.toBeInTheDocument();

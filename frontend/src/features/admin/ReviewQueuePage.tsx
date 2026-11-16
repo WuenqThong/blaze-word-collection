@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button, Spinner, Alert, Form, Modal, Badge } from "react-bootstrap";
 import { Link } from "react-router-dom";
 import { reviewApi } from "../../api/review";
@@ -60,11 +60,10 @@ export function ReviewQueuePage() {
   const [projectFilter, setProjectFilter] = useState<number | "">("");
   const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const [refreshing, setRefreshing] = useState(true);
   const [detailFor, setDetailFor] = useState<DataReviewItem | null>(null);
 
-  const load = () => {
-    setRefreshing(true);
+  const load = useCallback(() => {
     reviewApi
       .reviewByData({
         project_id: projectFilter === "" ? undefined : projectFilter,
@@ -77,7 +76,7 @@ export function ReviewQueuePage() {
       })
       .catch((e) => setError(extractError(e)))
       .finally(() => setRefreshing(false));
-  };
+  }, [projectFilter, page]);
 
   useEffect(() => {
     projectsApi.list()
@@ -87,11 +86,14 @@ export function ReviewQueuePage() {
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectFilter, page]);
+  }, [load]);
 
-  // Reset về trang 1 khi filter project thay đổi
-  useEffect(() => { setPage(1); }, [projectFilter]);
+
+  const [previousQuery, setPreviousQuery] = useState({ projectFilter, page });
+  if (previousQuery.projectFilter !== projectFilter || previousQuery.page !== page) {
+    setPreviousQuery({ projectFilter, page });
+    setRefreshing(true);
+  }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -101,16 +103,16 @@ export function ReviewQueuePage() {
 
       <div className={`data-review-shell ${detailFor ? "with-detail" : ""}`}>
         <div className="data-review-toolbar">
-          <Link to="/dashboard" className="data-review-back" title="Quay lại Dashboard">
+          <Link to="/dashboard" className="data-review-back" title="Quay lại Tổng quan">
             <i className="bi bi-arrow-left"></i>
           </Link>
           <Form.Select
             size="sm"
             style={{ minWidth: 180, maxWidth: 240 }}
             value={projectFilter}
-            onChange={(e) => setProjectFilter(e.target.value === "" ? "" : Number(e.target.value))}
+            onChange={(e) => { setProjectFilter(e.target.value === "" ? "" : Number(e.target.value)); setPage(1); }}
           >
-            <option value="">Tất cả project</option>
+            <option value="">Tất cả dự án</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
@@ -213,7 +215,7 @@ export function ReviewQueuePage() {
             key={detailFor.audio_id}
             item={detailFor}
             onClose={() => setDetailFor(null)}
-            onChanged={() => load()}
+            onChanged={() => { setRefreshing(true); load(); }}
           />
         )}
         </div>
@@ -305,14 +307,20 @@ function DataDetailPanel({
   onChanged: () => void;
 }) {
   const [detail, setDetail] = useState<DataReviewDetail | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [busyAnn, setBusyAnn] = useState<number | null>(null);
   const [reject, setReject] = useState<{ id: number; note: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const [previousInputs, setPreviousInputs] = useState([item.audio_id]);
+  if (previousInputs[0] !== item.audio_id) {
+    setPreviousInputs([item.audio_id]);
     setLoading(true);
     setError(null);
+    setDetail(null);
+  }
+
+  useEffect(() => {
     let current = true;
     reviewApi
       .reviewDataDetail(item.audio_id)
@@ -372,7 +380,7 @@ function DataDetailPanel({
           ) : detail ? (
             <div className="data-review-detail">
               {detail.groups.length === 0 ? (
-                <div className="text-muted">Chưa có task nào.</div>
+                <div className="text-muted">Chưa có nhiệm vụ nào.</div>
               ) : (
                 detail.groups.map((g) => (
                   <DetailGroup
@@ -396,12 +404,12 @@ function DataDetailPanel({
         </Modal.Header>
         <Modal.Body>
           <Form.Label className="text-muted small">
-            Note này sẽ hiển thị cho annotator để họ hiểu lý do bị từ chối.
+            Ghi chú này sẽ hiển thị cho người gán nhãn để họ hiểu lý do bị từ chối.
           </Form.Label>
           <Form.Control
             as="textarea"
             rows={3}
-            placeholder="VD: transcript sai, không nghe rõ..."
+            placeholder="VD: bản chép lời sai, không nghe rõ..."
             value={reject?.note ?? ""}
             onChange={(e) => reject && setReject({ ...reject, note: e.target.value })}
             autoFocus
@@ -410,7 +418,7 @@ function DataDetailPanel({
         <Modal.Footer>
           <Button variant="outline-secondary" onClick={() => setReject(null)}>Huỷ</Button>
           <Button variant="danger" onClick={handleReject} disabled={busyAnn !== null}>
-            <i className="bi bi-x-circle me-2"></i>Reject
+            <i className="bi bi-x-circle me-2"></i>Không đạt
           </Button>
         </Modal.Footer>
       </Modal>
@@ -441,7 +449,7 @@ function DetailGroup({
               <i className={`bi ${meta.icon}`}></i>
               {meta.label}
             </span>
-            <span className="text-muted small">{t.annotations.length} annotation</span>
+            <span className="text-muted small">{t.annotations.length} bài gán nhãn</span>
           </div>
           {Object.keys(t.payload).length > 0 && (
             <div className="data-review-task-payload">
@@ -454,7 +462,7 @@ function DetailGroup({
             </div>
           )}
           {t.annotations.length === 0 ? (
-            <div className="text-muted small">Chưa có annotation.</div>
+            <div className="text-muted small">Chưa có bài gán nhãn.</div>
           ) : (
             t.annotations.map((ann) => (
               <div
@@ -466,10 +474,10 @@ function DetailGroup({
                   <span className="data-review-ann-user">{ann.user_full_name}</span>
                   <span className="text-muted small">{relTime(ann.created_at)}</span>
                   {ann.low_engagement && (
-                    <Badge bg="warning" text="dark"><i className="bi bi-exclamation-triangle"></i> low</Badge>
+                    <Badge bg="warning" text="dark"><i className="bi bi-exclamation-triangle"></i> thấp</Badge>
                   )}
                   {ann.is_golden_check && (
-                    <Badge bg="info"><i className="bi bi-shield-check"></i> golden</Badge>
+                    <Badge bg="info"><i className="bi bi-shield-check"></i> mẫu kiểm tra chuẩn</Badge>
                   )}
                 </div>
                 <div className="data-review-ann-answer">{answerSummary(ann.answer)}</div>

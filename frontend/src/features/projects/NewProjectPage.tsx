@@ -3,7 +3,8 @@ import { Button, Alert } from "react-bootstrap";
 import { Link, useNavigate } from "react-router-dom";
 import { projectsApi } from "../../api/projects";
 import { extractError } from "../../api/client";
-import { ProjectForm, DEFAULT_FORM, type ProjectFormState } from "./ProjectForm";
+import { ProjectForm } from "./ProjectForm";
+import { DEFAULT_FORM, type ProjectFormState } from "./projectFormState";
 import { projectPath } from "../../lib/slug";
 
 export function NewProjectPage() {
@@ -32,7 +33,7 @@ export function NewProjectPage() {
       });
       navigate(projectPath(created), { replace: true });
     } catch (err) {
-      setError(extractError(err, "Tạo project thất bại"));
+      setError(extractError(err, "Tạo dự án thất bại"));
     } finally {
       setSubmitting(false);
     }
@@ -45,11 +46,11 @@ export function NewProjectPage() {
           <Link to="/projects" className="small text-muted">
             <i className="bi bi-arrow-left me-1"></i>Quay lại danh sách
           </Link>
-          <h3 className="mt-1 mb-0">Tạo project mới</h3>
+          <h3 className="mt-1 mb-0">Tạo dự án mới</h3>
         </div>
         <Button type="submit" variant="primary" disabled={submitting || !state.name.trim()}>
           {submitting ? <><span className="spinner-border spinner-border-sm me-2"></span>Đang tạo...</> : (
-            <><i className="bi bi-check2 me-2"></i>Tạo project</>
+            <><i className="bi bi-check2 me-2"></i>Tạo dự án</>
           )}
         </Button>
       </div>
@@ -61,7 +62,7 @@ export function NewProjectPage() {
       <div className="d-flex justify-content-end mt-4">
         <Link to="/projects" className="btn btn-outline-secondary me-2">Huỷ</Link>
         <Button type="submit" variant="primary" disabled={submitting || !state.name.trim()}>
-          {submitting ? "Đang tạo..." : "Tạo project"}
+          {submitting ? "Đang tạo..." : "Tạo dự án"}
         </Button>
       </div>
     </form>

@@ -37,7 +37,7 @@ export function Playground({ projectId, emptyExtra }: PlaygroundProps) {
   const [showGuideline, setShowGuideline] = useState(false);
 
   const playerRef = useRef<AudioPlayerHandle>(null);
-  const taskStartRef = useRef<number>(Date.now());
+  const taskStartRef = useRef<number>(0);
 
   const { user } = useAuth();
   const [submissionMessage, setSubmissionMessage] = useState<string | null>(null);
@@ -85,29 +85,39 @@ export function Playground({ projectId, emptyExtra }: PlaygroundProps) {
     taskStartRef.current = Date.now();
   }, [user]);
 
-  const fetchNext = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    setTask(null); // clear ngay để tránh hiển thị task cũ trong lúc fetch
-    try {
-      const t = projectId !== undefined
-        ? await annotateApi.nextTask(projectId)
-        : await annotateApi.myNextTask(mode || undefined);
-      setTask(t);
-      if (t.has_task) resetForTask(t);
-    } catch (e) {
-      setError(extractError(e, "Không lấy được task"));
-    } finally {
-      setLoading(false);
-    }
+  const loadNext = useCallback(() => {
+    const request = projectId !== undefined
+      ? annotateApi.nextTask(projectId)
+      : annotateApi.myNextTask(mode || undefined);
+    return request.then((next) => {
+      setTask(next);
+      if (next.has_task) resetForTask(next);
+    }).catch((e: unknown) => {
+      setError(extractError(e, "Không lấy được nhiệm vụ"));
+    }).finally(() => setLoading(false));
   }, [projectId, mode, resetForTask]);
 
+  const [previousInputs, setPreviousInputs] = useState([projectId, mode, user]);
+  if (previousInputs[0] !== projectId || previousInputs[1] !== mode || previousInputs[2] !== user) {
+    setPreviousInputs([projectId, mode, user]);
+    setLoading(true);
+    setError(null);
+    setTask(null);
+  }
+
   useEffect(() => {
-    void fetchNext();
+    void loadNext();
     reviewApi.myScoreSummary()
       .then((s) => { setPendingCount(s.count_pending); })
       .catch(() => {});
-  }, [fetchNext]);
+  }, [loadNext]);
+
+  const fetchNext = () => {
+    setLoading(true);
+    setError(null);
+    setTask(null);
+    return loadNext();
+  };
 
   const buildAnswer = (): Record<string, unknown> | null => {
     if (!task?.task_type) return null;
@@ -186,8 +196,8 @@ export function Playground({ projectId, emptyExtra }: PlaygroundProps) {
           <h4 className="empty-state-title">Bạn đã gán xong rồi</h4>
           <p className="empty-state-sub">
             {mode
-              ? `Không còn task nào ở chế độ "${modeLabel}". Thử chọn chế độ khác hoặc quay lại sau.`
-              : "Hệ thống sẽ tự cấp task mới khi có dữ liệu. Quay lại sau bạn nhé."}
+              ? `Không còn nhiệm vụ nào ở chế độ "${modeLabel}". Thử chọn chế độ khác hoặc quay lại sau.`
+              : "Hệ thống sẽ tự cấp nhiệm vụ mới khi có dữ liệu. Quay lại sau bạn nhé."}
           </p>
 
           {pendingCount > 0 && (
@@ -286,12 +296,12 @@ export function Playground({ projectId, emptyExtra }: PlaygroundProps) {
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") void handleSubmit(); }}
-                  placeholder="Nhập nội dung audio..."
+                  placeholder="Nhập nội dung âm thanh..."
                   autoFocus
                 />
               ) : (
                 <div className={`task-prompt ${text ? "" : "empty"}`}>
-                  {text || "Bấm Edit để nhập transcript bạn nghe được"}
+                  {text || "Bấm Sửa để nhập bản chép lời bạn nghe được"}
                 </div>
               )
             )}
@@ -335,17 +345,17 @@ export function Playground({ projectId, emptyExtra }: PlaygroundProps) {
                 {editing ? (
                   <Button variant="primary" className="verify-btn"
                     onClick={handleSubmit} disabled={submitting || !canSubmit}>
-                    <i className="bi bi-send me-2"></i>Submit
+                    <i className="bi bi-send me-2"></i>Gửi
                   </Button>
                 ) : (
                   <>
                     <Button variant="outline-secondary" className="verify-btn"
                       onClick={handleSubmit} disabled={submitting || !canSubmit}>
-                      <i className="bi bi-check2-circle me-2"></i>Correct
+                      <i className="bi bi-check2-circle me-2"></i>Đúng
                     </Button>
                     <Button variant="outline-secondary" className="verify-btn"
                       onClick={() => setEditing(true)} disabled={submitting}>
-                      <i className="bi bi-pencil-square me-2"></i>Edit
+                      <i className="bi bi-pencil-square me-2"></i>Sửa
                     </Button>
                   </>
                 )}
@@ -373,7 +383,7 @@ export function Playground({ projectId, emptyExtra }: PlaygroundProps) {
               <div className="d-flex justify-content-end">
                 <Button variant="primary" onClick={handleSubmit} disabled={submitting || !canSubmit}>
                   {submitting ? <Spinner size="sm" animation="border" /> : (
-                    <>Submit <i className="bi bi-arrow-right ms-2"></i></>
+                    <>Gửi <i className="bi bi-arrow-right ms-2"></i></>
                   )}
                 </Button>
               </div>
@@ -395,7 +405,7 @@ export function Playground({ projectId, emptyExtra }: PlaygroundProps) {
           onClick={() => setShowReport(true)}
           disabled={!task?.assignment_id}
         >
-          <i className="bi bi-flag"></i><span>Báo cáo audio</span>
+          <i className="bi bi-flag"></i><span>Báo cáo âm thanh</span>
         </button>
         <div className="flex-grow-1"></div>
         <button
@@ -439,7 +449,6 @@ function VerifyCard({ audioUrl, suggestedLabel, submitting, onAnswer, scoreHint 
   const [playing, setPlaying] = useState(false);
 
   useEffect(() => {
-    setPlaying(false);
     if (audioRef.current) audioRef.current.currentTime = 0;
   }, [audioUrl]);
 
@@ -461,6 +470,7 @@ function VerifyCard({ audioUrl, suggestedLabel, submitting, onAnswer, scoreHint 
       <audio
         ref={audioRef}
         src={audioUrl}
+        onEmptied={() => setPlaying(false)}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onEnded={() => setPlaying(false)}

@@ -6,7 +6,7 @@ import { dateLabel, type Contribution, type Page } from "./types";
 
 export function DialectDashboard() {
   const {user} = useAuth();
-  if (user?.role === "admin") return <AdminDashboard/>;
+  if (["admin", "reviewer"].includes(user?.role ?? "")) return <AdminDashboard/>;
   if (user?.role === "reviewer") return <ReviewerDashboard/>;
   return <ContributorDashboard/>;
 }

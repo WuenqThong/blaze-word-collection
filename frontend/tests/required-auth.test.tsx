@@ -5,7 +5,7 @@ import { AxiosError } from "axios";
 import { authApi } from "../src/api/auth";
 import { demoRoute } from "../src/features/demo/routes";
 import { repository, DemoRepository, REGIONS_PACK } from "../src/features/demo/repository";
-import { returnPath } from "../src/features/auth/returnPath";
+import { loginReturnPath, returnPath } from "../src/features/auth/returnPath";
 import { DISTRICTS, REGION_CHOICES } from "../src/features/demo/regions";
 import { applyCommand, gameAllocation } from "../src/features/demo/domain";
 import { consentDefault, seed } from "../src/features/demo/seed";
@@ -61,6 +61,15 @@ describe("required login and district selection", () => {
   it("preserves local return destinations and rejects external redirects", () => {
     expect(returnPath({ from: { pathname: "/demo/play", search: "?campaign=c1" } })).toBe("/demo/play?campaign=c1");
     expect(returnPath({ from: { pathname: "//evil.example" } })).toBe("/demo/play");
+  });
+  it("opens the correct workspace for each role after login", () => {
+    expect(loginReturnPath(null, "reviewer")).toBe("/demo/reviewer/review");
+    expect(loginReturnPath(null, "admin")).toBe("/demo/reviewer/review");
+    expect(loginReturnPath(null, "annotator")).toBe("/demo/play");
+    expect(loginReturnPath({ from: { pathname: "/demo/play" } }, "reviewer")).toBe("/demo/play");
+    expect(loginReturnPath({ from: { pathname: "/demo/reviewer/review" } }, "annotator")).toBe("/demo/play");
+    expect(loginReturnPath({ from: { pathname: "/demo/reviewer/review", search: "?view=done" } }, "reviewer")).toBe("/demo/reviewer/review?view=done");
+    expect(loginReturnPath({ from: { pathname: "//evil.example" } }, "admin")).toBe("/demo/reviewer/review");
   });
   it("lists Đà Nẵng and Quảng Nam units and lets an account say it is unsure", () => {
     expect(DISTRICTS).toHaveLength(25);

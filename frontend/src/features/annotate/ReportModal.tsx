@@ -27,7 +27,7 @@ export function ReportModal({ show, onHide, assignmentId, onSuccess }: ReportMod
       onSuccess();
       onHide();
     } catch (e) {
-      setError(extractError(e, "Gửi report thất bại"));
+      setError(extractError(e, "Gửi báo cáo thất bại"));
     } finally {
       setSubmitting(false);
     }
@@ -36,13 +36,13 @@ export function ReportModal({ show, onHide, assignmentId, onSuccess }: ReportMod
   return (
     <Modal show={show} onHide={onHide} centered backdrop={submitting ? "static" : true}>
       <Modal.Header closeButton>
-        <Modal.Title><i className="bi bi-flag me-2"></i>Báo cáo audio</Modal.Title>
+        <Modal.Title><i className="bi bi-flag me-2"></i>Báo cáo âm thanh</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         <Alert variant="info" className="d-flex align-items-start gap-2 py-2">
           <i className="bi bi-info-circle mt-1"></i>
           <div className="small">
-            <strong>Audio không thể gán?</strong> Hãy báo cáo. Nếu admin xác nhận hợp lệ, bạn vẫn được tính điểm như annotation thông thường.
+            <strong>Âm thanh không thể gán?</strong> Hãy báo cáo. Nếu quản trị viên xác nhận hợp lệ, bạn vẫn được tính điểm như bài gán nhãn thông thường.
           </div>
         </Alert>
 

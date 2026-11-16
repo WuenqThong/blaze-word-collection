@@ -89,7 +89,7 @@
 .dialect-results-heading strong { color: var(--dialect-ink); }
 .dialect-list { display: flex; flex-direction: column; gap: 12px; }
 .dialect-list-item { display: flex; gap: 20px; align-items: center; border: 1px solid var(--dialect-line); border-radius: 12px; padding: 16px 20px; text-decoration: none; color: var(--dialect-ink); background: white; }
-.dialect-list-item:hover { border-color: #dfc88e; background: #f8faff; }
+.dialect-list-item:hover { border-color: #dfc88e; background: #f9f8f5; }
 .dialect-list-copy { flex: 1; min-width: 0; }
 .dialect-list-copy h2 { font-size: 17px; margin: 8px 0; line-height: 1.3; overflow-wrap: anywhere; }
 .dialect-list-copy p { font-size: 16px; color: var(--dialect-muted); margin: 0 0 8px; overflow-wrap: anywhere; }

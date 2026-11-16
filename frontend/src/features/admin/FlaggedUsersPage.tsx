@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { reviewApi } from "../../api/review";
 import { extractError } from "../../api/client";
 import type { FlaggedUserItem, AccountStatus } from "../../lib/reviewTypes";
-import { useConfirm } from "../../components/ConfirmProvider";
+import { useConfirm } from "../../components/useConfirm";
 
 export function FlaggedUsersPage() {
   const confirm = useConfirm();
@@ -30,11 +30,11 @@ export function FlaggedUsersPage() {
       <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
         <div>
           <Link to="/dashboard" className="small text-muted">
-            <i className="bi bi-arrow-left me-1"></i>Dashboard
+            <i className="bi bi-arrow-left me-1"></i>Tổng quan
           </Link>
           <h3 className="mt-1 mb-0">Tài khoản bất thường</h3>
           <p className="text-muted mb-0 mt-1">
-            User có error rate ≥ 30% (sau ≥ 10 review) sẽ tự động bị flag.
+            Người dùng có tỷ lệ lỗi ≥ 30% (sau ≥ 10 đang đánh giá) sẽ tự động bị đánh dấu.
           </p>
         </div>
         <Badge bg="warning" text="dark" className="fs-6">
@@ -59,11 +59,11 @@ export function FlaggedUsersPage() {
             <Table hover className="align-middle mb-0">
               <thead className="table-light">
                 <tr>
-                  <th>User</th>
+                  <th>Người dùng</th>
                   <th>Email</th>
                   <th>Trạng thái</th>
                   <th className="text-end">Đã duyệt</th>
-                  <th className="text-end">Bị reject</th>
+                  <th className="text-end">Bị không đạt</th>
                   <th className="text-end">Tỉ lệ sai</th>
                   <th className="text-end">Điểm chính thức</th>
                   <th style={{ width: 200 }}></th>
@@ -76,7 +76,7 @@ export function FlaggedUsersPage() {
                     <td className="small text-muted">{u.email}</td>
                     <td>
                       <Badge bg={u.account_status === "suspended" ? "danger" : "warning"} text={u.account_status === "suspended" ? "light" : "dark"}>
-                        {u.account_status === "suspended" ? "Đã khoá" : "Đang review"}
+                        {u.account_status === "suspended" ? "Đã khoá" : "Đang đang đánh giá"}
                       </Badge>
                     </td>
                     <td className="text-end">{u.count_approved}</td>
@@ -94,7 +94,7 @@ export function FlaggedUsersPage() {
                         onClick={async () => {
                           const ok = await confirm({
                             title: "Khoá tài khoản",
-                            message: <>Khoá tài khoản <strong>{u.full_name}</strong>? User sẽ không thể đăng nhập cho tới khi được khôi phục.</>,
+                            message: <>Khoá tài khoản <strong>{u.full_name}</strong>? Người dùng sẽ không thể đăng nhập cho tới khi được khôi phục.</>,
                             confirmText: "Khoá",
                             variant: "danger",
                             icon: "bi-lock",

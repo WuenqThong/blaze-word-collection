@@ -1,5 +1,8 @@
-import { errorMessage } from "../../api/client";
-import { useState } from "react";
+import { ResponsiveTable } from "../../components/ResponsiveTable";
+import { apiClient, errorMessage } from "../../api/client";
+import { displayLabel, systemText } from "../../lib/display";
+import { DataCardView } from "../../components/DataCardView";
+import { useEffect, useState } from "react";
 import Papa from "papaparse";
 import { useDemo } from "./context";
 import { blankRaw } from "./seed";
@@ -16,6 +19,7 @@ import { repository } from "./repository";
 import { download } from "./files";
 import type { Raw } from "./types";
 import { downloadRelease } from "./server";
+import { PilotOperations } from "./PilotOperations";
 
 export function ImportDemo() {
   return (
@@ -65,7 +69,7 @@ function ImportInner() {
   async function read(file: File) {
     try {
       if (file.size > 5 * 1024 * 1024)
-        throw Error("Tệp import demo tối đa 5 MB.");
+        throw Error("Tệp import minh họa tối đa 5 MB.");
       const text = await file.text();
       let parsed: Record<string, string>[];
       if (file.name.endsWith(".jsonl")) {
@@ -94,7 +98,7 @@ function ImportInner() {
         if (result.errors.length)
           throw Error(
             result.errors
-              .map((e) => `Dòng ${e.row ?? "?"}: ${e.message}`)
+              .map((e) => `Dòng ${e.row ?? "?"}: ${systemText(e.message)}`)
               .join(" / "),
           );
         parsed = result.data;
@@ -115,10 +119,10 @@ function ImportInner() {
       <Heading title="Nhập ứng viên: đọc, đối chiếu, rồi tiếp nhận">
         <p>
           CSV / TSV / JSONL được xử lý trong trình duyệt; không tải lên nguồn
-          bên ngoài. Mọi dòng nhập đều bắt đầu RAW.
+          bên ngoài. Mọi dòng nhập đều bắt đầu Bản gốc.
         </p>
       </Heading>
-      <Panel title="01 / Chọn file & mapping">
+      <Panel title="01 / Chọn tệp & ghép cột">
         <Field label="Tệp CSV/TSV/JSONL">
           <input
             type="file"
@@ -140,7 +144,7 @@ function ImportInner() {
                   meaning: "Nghĩa minh họa",
                   standard: "Bản phổ thông minh họa",
                   context: "Ngữ cảnh tự soạn",
-                  evidence: "Nguồn demo chưa xác minh",
+                  evidence: "Nguồn minh họa chưa xác minh",
                   region: "Quảng Nam",
                   topic: "Sinh hoạt",
                 },
@@ -152,16 +156,16 @@ function ImportInner() {
         </Action>
         <div className="demo-form-grid">
           {Object.entries(mapping).map(([k, v]) => (
-            <Field key={k} label={`Cột ${k}`}>
+            <Field key={k} label={`Cột ${displayLabel(k)}`}>
               <select
                 value={v}
                 onChange={(e) =>
                   setMapping({ ...mapping, [k]: e.target.value })
                 }
               >
-                <option value="">Không map</option>
+                <option value="">Không sử dụng cột này</option>
                 {[...new Set([v, ...cols])].filter(Boolean).map((c) => (
-                  <option key={c}>{c}</option>
+                  <option key={c} value={c}>{displayLabel(c, c)}</option>
                 ))}
               </select>
             </Field>
@@ -173,7 +177,7 @@ function ImportInner() {
             checked={train}
             onChange={(e) => setTrain(e.target.checked)}
           />
-          Có căn cứ đồng ý training của lô DEMO
+          Có căn cứ đồng ý huấn luyện của lô Minh họa
         </label>
         <label className="demo-checkbox">
           <input
@@ -181,11 +185,11 @@ function ImportInner() {
             checked={publicConsent}
             onChange={(e) => setPublicConsent(e.target.checked)}
           />
-          Có căn cứ đồng ý công khai của lô DEMO
+          Có căn cứ đồng ý công khai của lô Minh họa
         </label>
-        <p>Quyền nguồn vẫn phải rà soát riêng sau import.</p>
+        <p>Sau khi nhập, cần rà soát quyền nguồn.</p>
       </Panel>
-      <Panel title="02 / Preview lỗi và trùng">
+      <Panel title="02 / Xem trước lỗi và trùng">
         {error && (
           <p role="alert" className="demo-error">
             {error}
@@ -196,7 +200,7 @@ function ImportInner() {
           {preview.filter((r) => !r.errors.length).length} dòng hợp lệ ·{" "}
           {preview.filter((r) => r.duplicate).length} dòng trùng.
         </p>
-        <div className="demo-table-scroll">
+        <ResponsiveTable>
           <table>
             <thead>
               <tr>
@@ -212,19 +216,19 @@ function ImportInner() {
                   <td>{r.raw.text}</td>
                   <td>
                     {r.errors.length
-                      ? `Thiếu ${r.errors.join(", ")}`
+                      ? `Thiếu ${r.errors.map(key => displayLabel(key)).join(", ")}`
                       : r.duplicate
-                        ? "Trùng: giữ RAW để đối chiếu"
+                        ? "Trùng: giữ Bản gốc để đối chiếu"
                         : "Hợp lệ"}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </ResponsiveTable>
         <p role="status">
           Tiến độ nhập: {progress}/
-          {preview.filter((r) => !r.errors.length).length}. Retry giữ ID batch
+          {preview.filter((r) => !r.errors.length).length}. Thử lại giữ ID lô dữ liệu
           để không nhân đôi.
         </p>
         <Action
@@ -258,8 +262,8 @@ function ImportInner() {
                 status: "completed" as const,
                 progress: 100,
                 log: [
-                  `Nhập ${n} dòng hợp lệ thành RAW`,
-                  `${preview.filter((r) => r.errors.length).length} dòng lỗi giữ trong preview`,
+                  `Nhập ${n} dòng hợp lệ thành Bản gốc`,
+                  `${preview.filter((r) => r.errors.length).length} dòng lỗi giữ trong xem trước`,
                 ],
                 at: new Date().toISOString(),
               };
@@ -289,93 +293,117 @@ function DatasetInner() {
   const { state, run, live } = useDemo();
   const [card, setCard] = useState(
     live
-      ? "Ứng viên dữ liệu huấn luyện phương ngữ Quảng Nam – Đà Nẵng: mẫu đã được duyệt, đã chuẩn hóa, có đồng ý huấn luyện và nguồn đã xác nhận quyền. Chưa đánh giá benchmark; không công khai nếu mẫu chưa có đồng ý công khai."
-      : "Bộ dữ liệu DEMO để quản lý duyệt frontend. Không dùng huấn luyện, benchmark hoặc công khai như dữ liệu thật.",
+      ? "Ứng viên dữ liệu huấn luyện phương ngữ Quảng Nam – Đà Nẵng: mẫu đã được duyệt, đã chuẩn hóa, có đồng ý huấn luyện và nguồn đã xác nhận quyền. Chưa đánh giá đánh giá đối chiếu; không công khai nếu mẫu chưa có đồng ý công khai."
+      : "Bộ dữ liệu Minh họa để quản lý duyệt giao diện. Không dùng huấn luyện, đánh giá đối chiếu hoặc công khai như dữ liệu thật.",
   );
   const [error, setError] = useState("");
   const selected = state.contributions.filter((c) => eligible(state, c));
-  const records = splitRecords(selected);
+  const records = live ? [] : splitRecords(selected);
+  const [previewResult, setPreviewResult] = useState<{ contributions: typeof state.contributions; offset: number; data: {
+    splits?: Record<string, string>; warnings?: string[]; data_card?: string;
+    ids: number[]; eligible_count: number; total: number; excluded_count: number; preview_digest: string;
+    items: { id: number; text: string; region: string; eligible: boolean; reasons: string[] }[];
+  } } | null>(null);
+  const [offset, setOffset] = useState(0);
+  const [creating, setCreating] = useState(false);
+  const serverPreview = previewResult?.contributions === state.contributions && previewResult.offset === offset ? previewResult.data : null;
+  useEffect(() => {
+    if (!live) return;
+    let active = true;
+    apiClient.get("/dialect/releases/preview", { params: { offset } }).then(({ data }) => {
+      if (active) { setPreviewResult({ data, contributions: state.contributions, offset }); setError(""); }
+    }).catch((e: unknown) => { if (active) setError(errorMessage(e)); });
+    return () => { active = false; };
+  }, [live, state.contributions, offset]);
   return (
     <>
-      <Heading title="Dataset có truy vết & kiểm điều kiện">
+      <Heading title="Bộ dữ liệu">
         <p>
-          Chỉ xuất CURATED đủ QA, consent và nguồn. Chia theo nhóm liên thông
-          người/nguồn/họ câu để giữ cùng nhóm trong một tập.
+          Chỉ xuất mẫu đã duyệt và đủ quyền.
         </p>
       </Heading>
-      <Panel title="Preview hiện tại">
+      <Panel title="Mẫu">
         <p>
-          {selected.length} đủ điều kiện / {state.contributions.length} bản gốc.
-          Phạm vi xuất: {live ? "ứng viên huấn luyện đã duyệt (verified-training-candidates)" : "DEMO_ONLY"}.
+          {live ? serverPreview ? `${serverPreview.eligible_count}/${serverPreview.total} mẫu sẵn sàng.` : "Đang kiểm tra điều kiện trên máy chủ…" : `${selected.length} đủ điều kiện / ${state.contributions.length} bản gốc.`}
         </p>
-        <div className="demo-table-scroll">
+        <ResponsiveTable>
           <table>
             <thead>
               <tr>
                 <th>Mẫu</th>
                 <th>Điều kiện</th>
-                <th>Split</th>
+                <th>Nhóm dữ liệu</th>
               </tr>
             </thead>
             <tbody>
-              {state.contributions.map((c) => (
+              {live ? serverPreview?.items.map(c => <tr key={c.id}><td>{c.text}</td><td>{c.eligible ? "Sẵn sàng" : <details><summary>{c.reasons.some(reason => reason.startsWith("Trùng")) ? "Trùng" : "Cần xử lý"}</summary><ul>{c.reasons.map(reason => <li key={reason}>{systemText(reason)}</li>)}</ul></details>}</td><td>{displayLabel(serverPreview.splits?.[String(c.id)], "Không xuất")}</td></tr>) : state.contributions.map((c) => (
                 <tr key={c.id}>
-                  <td>{c.raw.text || c.raw.response}</td>
+                  <td>{c.raw.text || displayLabel(c.raw.response)}</td>
                   <td>
                     {eligible(state, c)
-                      ? live ? "Đủ QA và quyền" : "Đủ QA/quyền demo"
+                      ? live ? "Đủ Kiểm tra chất lượng và quyền" : "Đủ Kiểm tra chất lượng/quyền minh họa"
                       : exclusionReasons(state, c).join(" · ")}
                   </td>
                   <td>
-                    {records.find((r) => r.id === c.id)?.split ?? "Không xuất"}
+                    {displayLabel(live
+                      ? serverPreview?.splits?.[c.id.replace(/^c:/, "")] ?? "Máy chủ xác định khi tạo bản xuất"
+                      : records.find((r) => r.id === c.id)?.split ?? "Không xuất")}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
-        <p className="demo-note">
-          Tỷ lệ mục tiêu 80/10/10 theo hash nhóm. Lô nhỏ hoặc một nhóm lớn có
-          thể có tập rỗng; không tách nhóm chỉ để đủ tỷ lệ.
-        </p>
-        <Field label="Data card">
-          <textarea
-            rows={4}
-            value={card}
-            onChange={(e) => setCard(e.target.value)}
-          />
-        </Field>
+        </ResponsiveTable>
+        {live && serverPreview && serverPreview.total > 25 && <div className="demo-actions"><Action disabled={offset === 0} onClick={() => setOffset(n => Math.max(0, n - 25))}>Trang trước</Action><span>Trang {Math.floor(offset / 25) + 1} / {Math.ceil(serverPreview.total / 25)}</span><Action disabled={offset + 25 >= serverPreview.total} onClick={() => setOffset(n => n + 25)}>Trang sau</Action></div>}
+        {live ? (
+          <details>
+            <summary>Chi tiết bộ dữ liệu</summary>
+            <DataCardView value={serverPreview?.data_card ?? ""} />
+          </details>
+        ) : (
+          <Field label="Mô tả bộ dữ liệu">
+            <textarea
+              rows={4}
+              value={card}
+              onChange={(e) => setCard(e.target.value)}
+            />
+          </Field>
+        )}
         {error && (
           <p role="alert" className="demo-error">
             {error}
           </p>
         )}
         <Action
-          disabled={!selected.length || !card.trim()}
+          disabled={creating || (live ? !serverPreview?.ids.length : !selected.length || !card.trim())}
           onClick={async () => {
+            setCreating(true);
             try {
               const checksum = await sha256(records);
               await run({
                 type: "release",
                 release: {
                   id: uid(),
-                  ids: selected.map((c) => c.id),
+                  ids: live ? serverPreview!.ids.map(id => `c:${id}`) : selected.map((c) => c.id),
+                  ...(live ? { previewDigest: serverPreview!.preview_digest } : {}),
                   records,
                   checksum,
-                  dataCard: card,
+                  dataCard: live ? serverPreview?.data_card ?? "" : card,
                   at: new Date().toISOString(),
                 },
               });
               setError("");
             } catch (e) {
               setError(errorMessage(e));
+            } finally {
+              setCreating(false);
             }
           }}
         >
-          {live ? "Tạo bản xuất có manifest" : "Tạo bản xuất DEMO có manifest"}
+          {creating ? "Đang tạo bản xuất…" : live ? "Tạo phiên bản" : "Tạo bản xuất Minh họa có bảng kê dữ liệu"}
         </Action>
       </Panel>
-      <Panel title="Các phiên bản đã tạo">
+      <Panel title="Phiên bản">
         {state.releases.map((r) => {
           const affected = r.ids.filter((id) => {
             const c = state.contributions.find((c) => c.id === id);
@@ -387,7 +415,9 @@ function DatasetInner() {
                 {r.id} · {r.records.length} mẫu
               </h3>
               <p>{r.at}</p>
-              <p className="demo-checksum">SHA-256 records: {r.checksum}</p>
+              <p>Nhóm dữ liệu {live ? "từ máy chủ" : "minh họa"}: {(["train", "dev", "test"] as const).map((split) => `${displayLabel(split)}: ${r.records.filter((record) => record.split === split).length}`).join(" · ")}</p>
+              <details><summary>Thông tin bộ dữ liệu và phạm vi sử dụng</summary><DataCardView value={r.dataCard} /></details>
+              <p className="demo-checksum">Mã kiểm tra tính toàn vẹn: {r.checksum}</p>
               <p>
                 {affected.length
                   ? `Chặn tải: ${affected.length} mẫu mất điều kiện`
@@ -397,8 +427,10 @@ function DatasetInner() {
                 disabled={!!affected.length}
                 onClick={async () => {
                   if (live && r.id.startsWith("r:")) {
-                    // The server re-checks eligibility and returns its own manifest.
-                    download(`dataset-${r.id.slice(2)}.json`, await downloadRelease(r.id));
+                    try {
+                      download(`dataset-${r.id.slice(2)}.json`, await downloadRelease(r.id));
+                      setError("");
+                    } catch (e) { setError(errorMessage(e)); }
                     return;
                   }
                   const checksum = await sha256(r.records);
@@ -421,7 +453,7 @@ function DatasetInner() {
                   });
                 }}
               >
-                Tải JSON + manifest + data card
+                Tải JSON
               </Action>
             </div>
           );
@@ -439,19 +471,21 @@ export function OperationsDemo() {
   );
 }
 function OperationsInner() {
-  const { state, run } = useDemo();
+  const { state, run, live } = useDemo();
   const [error, setError] = useState("");
   const [restore, setRestore] = useState<File | null>(null);
+  if (live) return <PilotOperations />;
   return (
     <>
-      <Heading title="Vận hành DEMO và truy nguyên">
+      <Heading title="Vận hành Minh họa và truy nguyên">
         <p>
-          Kho riêng trên trình duyệt. Backup này không phải backup server; không
+          Kho riêng trên trình duyệt. Sao lưu này không phải sao lưu máy chủ; không
           mô phỏng bảo vệ thật bằng lời khẳng định.
         </p>
       </Heading>
-      <Panel title="Backup / khôi phục">
-        <p>Lần tạo backup: {state.backupAt ?? "Chưa có"}</p>
+      {!!state.catalogBackups?.length && <Panel title="Cấu hình cũ được giữ trên thiết bị"><p>Khi chuyển sang cấu hình máy chủ, bản bộ đề, câu hỏi và chiến dịch cũ được giữ lại để đối chiếu. Bản này chưa tự ghi đè cấu hình máy chủ.</p>{state.catalogBackups.map((backup, i) => <div key={i}><p>{new Date(backup.at).toLocaleString("vi-VN")} · {backup.exams.length} bộ đề · {backup.questions.length} câu hỏi</p><Action onClick={() => download(`cau-hinh-cu-${i + 1}.json`, backup)}>Tải bản cấu hình cũ</Action></div>)}</Panel>}
+      <Panel title="Sao lưu / khôi phục">
+        <p>Lần tạo sao lưu: {state.backupAt ?? "Chưa có"}</p>
         <Action
           onClick={async () => {
             await run({ type: "backup" });
@@ -461,9 +495,9 @@ function OperationsInner() {
             );
           }}
         >
-          Tạo và tải backup (kèm media)
+          Tạo và tải sao lưu (kèm media)
         </Action>
-        <Field label="Bản backup DEMO để nhập lại">
+        <Field label="Bản sao lưu Minh họa để nhập lại">
           <input
             type="file"
             accept=".json"
@@ -472,10 +506,10 @@ function OperationsInner() {
         </Field>
         <label className="demo-checkbox">
           <input type="checkbox" checked={!!restore} disabled />
-          File đã chọn: {restore?.name ?? "Chưa chọn"}
+          Tệp đã chọn: {restore?.name ?? "Chưa chọn"}
         </label>
         <p className="demo-note">
-          Nhập thay thế toàn bộ kho DEMO hiện tại. Xuất backup trước nếu muốn
+          Nhập thay thế toàn bộ kho Minh họa hiện tại. Xuất sao lưu trước nếu muốn
           giữ bản cũ.
         </p>
         <Action
@@ -483,7 +517,7 @@ function OperationsInner() {
           onClick={async () => {
             try {
               if (restore!.size > 100 * 1024 * 1024)
-                throw Error("Backup demo tối đa 100 MB.");
+                throw Error("Sao lưu minh họa tối đa 100 MB.");
               await repository().restore(JSON.parse(await restore!.text()));
               setRestore(null);
               setError("");
@@ -492,7 +526,7 @@ function OperationsInner() {
             }
           }}
         >
-          Xác nhận thay kho DEMO bằng backup
+          Xác nhận thay kho Minh họa bằng sao lưu
         </Action>
         {error && (
           <p className="demo-error" role="alert">
@@ -500,14 +534,14 @@ function OperationsInner() {
           </p>
         )}
       </Panel>
-      <Panel title="Job log / thử lại">
+      <Panel title="Nhật ký tác vụ & thử lại">
         {state.jobs.map((j) => (
           <div className="demo-list-row" key={j.id}>
             <div>
               <strong>
-                {j.type} · {j.status}
+                {displayLabel(j.type)} · {displayLabel(j.status)}
               </strong>
-              <p>{j.log.join(" / ")}</p>
+              <p>{j.log.map(line => systemText(line)).join(" / ")}</p>
             </div>
             {j.status === "failed" && (
               <Action
@@ -518,19 +552,19 @@ function OperationsInner() {
                       ...j,
                       status: "queued",
                       progress: 0,
-                      log: [...j.log, "Thử lại theo kịch bản demo"],
+                      log: [...j.log, "Thử lại theo kịch bản minh họa"],
                     },
                   })
                 }
               >
-                Thử lại job
+                Thử lại tác vụ
               </Action>
             )}
           </div>
         ))}
       </Panel>
-      <Panel title="Audit">
-        <div className="demo-table-scroll">
+      <Panel title="Nhật ký thay đổi">
+        <ResponsiveTable>
           <table>
             <thead>
               <tr>
@@ -546,20 +580,20 @@ function OperationsInner() {
                   <td>
                     {e.actor}
                     <br />
-                    {e.action}
+                    {displayLabel(e.action, "Cập nhật dữ liệu")}
                   </td>
                   <td>
                     {e.entity}
                     <details>
                       <summary>Chi tiết</summary>
-                      <pre>{e.note}</pre>
+                      <p>{systemText(e.note, "Đã ghi nhận thay đổi dữ liệu.")}</p>
                     </details>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </ResponsiveTable>
       </Panel>
     </>
   );

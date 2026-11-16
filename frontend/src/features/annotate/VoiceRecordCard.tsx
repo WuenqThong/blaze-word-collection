@@ -11,13 +11,18 @@ interface VoiceRecordCardProps {
 
 type RecState = "idle" | "recording" | "recorded";
 
-export function VoiceRecordCard({ audioUrl, question, submitting, onSubmit, scoreHint }: VoiceRecordCardProps) {
+export function VoiceRecordCard(props: VoiceRecordCardProps) {
+  return <RecordingSession key={props.audioUrl} {...props} />;
+}
+
+function RecordingSession({ audioUrl, question, submitting, onSubmit, scoreHint }: VoiceRecordCardProps) {
   const promptAudioRef = useRef<HTMLAudioElement | null>(null);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const mountedRef = useRef(false);
   const streamRef = useRef<MediaStream | null>(null);
-  const startedAtRef = useRef<number>(Date.now());
+  const startedAtRef = useRef<number>(0);
   const playCountRef = useRef(0);
   const listenedRef = useRef(0);
   const lastTimeRef = useRef(0);
@@ -32,20 +37,27 @@ export function VoiceRecordCard({ audioUrl, question, submitting, onSubmit, scor
 
   // Reset on src change
   useEffect(() => {
-    setState("idle");
-    setRecordedBlob(null);
-    if (recordedUrl) URL.revokeObjectURL(recordedUrl);
-    setRecordedUrl(null);
-    setDuration(0);
     playCountRef.current = 0;
     listenedRef.current = 0;
     startedAtRef.current = Date.now();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audioUrl]);
 
-  // Cleanup on unmount
+  // A source change unmounts this session, including pending microphone requests.
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      const recorder = recorderRef.current;
+      if (recorder) {
+        recorder.ondataavailable = null;
+        recorder.onstop = null;
+        if (recorder.state !== "inactive") recorder.stop();
+      }
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+    };
+  }, []);
+
   useEffect(() => () => {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
     if (recordedUrl) URL.revokeObjectURL(recordedUrl);
   }, [recordedUrl]);
 
@@ -60,6 +72,10 @@ export function VoiceRecordCard({ audioUrl, question, submitting, onSubmit, scor
     setError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!mountedRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       streamRef.current = stream;
       const rec = new MediaRecorder(stream, { mimeType: "audio/webm" });
       chunksRef.current = [];
@@ -81,6 +97,8 @@ export function VoiceRecordCard({ audioUrl, question, submitting, onSubmit, scor
       setState("recording");
       setDuration(0);
     } catch {
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      if (!mountedRef.current) return;
       setError("Không truy cập được microphone — vui lòng cho phép quyền mic.");
     }
   };

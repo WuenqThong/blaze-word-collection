@@ -100,7 +100,7 @@ describe("import and audio failure paths", () => {
     );
     await user.click(screen.getByRole("button", { name: "Thu âm" }));
     await screen.findByRole("alert");
-    expect(screen.getByRole("button", { name: "Tải file" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Tải tệp" })).toBeEnabled();
     expect(getUserMedia).toHaveBeenCalledTimes(1);
     expect(onChange).not.toHaveBeenCalled();
     expect((await repository().load()).media).toHaveLength(0);

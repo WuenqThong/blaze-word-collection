@@ -5,17 +5,19 @@ import unicodedata
 from collections import Counter
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
-from sqlalchemy import func
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import func, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db, utcnow
+from app.core.roles import STAFF_ROLES, canonical_role
 from app.models.user import User
 from app.models.dialect import DialectContribution as C, DialectSource as S, DialectVote as V, DialectEvent as E, DialectRelease as R, DialectProfile as P
 from app.models.dialect import DialectContributionMeta as M, DialectSourceRights as SR, DialectParticipant as DP, DialectReleaseCard as RC
 from app.routers.deps import get_current_user
+from app.services.contribution_quality import QUALITY_POLICY_VERSION, quality_reasons
 
 router = APIRouter(prefix="/dialect", tags=["dialect"])
 CONSENT_VERSION = "dialect-2026-11-v1"
@@ -24,14 +26,17 @@ ACCEPTED_CONSENT_VERSIONS = (CONSENT_VERSION, "demo-consent-v1", "demo-import-v1
 RESPONSES = ("answer", "unknown", "no_term", "same_standard")
 
 
-def active(user: User = Depends(get_current_user)):
+def active(request: Request, user: User = Depends(get_current_user)):
+    expected = request.headers.get('X-Account-ID')
+    if expected is not None and expected != str(user.id):
+        raise HTTPException(409, 'Phiên tài khoản đã thay đổi; chưa thực hiện thao tác')
     if user.account_status == "suspended":
         raise HTTPException(403, "Tài khoản đang bị tạm dừng")
     return user
 
 
 def admin(user: User = Depends(active)):
-    if user.role != "admin":
+    if user.role not in ('admin', 'reviewer'):
         raise HTTPException(403, "Chỉ quản trị viên được thực hiện thao tác này")
     return user
 
@@ -87,9 +92,10 @@ def pack(item, db, user, adjudication=False):
             "raw": item.raw, "status": item.status, "withdrawn_at": item.withdrawn_at, "created_at": item.created_at,
             "rights_confirmed": source.rights_confirmed, "rights_note": source.rights_note,
             "vote_count": len(votes), "has_voted": own_vote is not None,
-            "votes": [{"id": v.id, "reviewer_id": v.reviewer_id, "verdict": v.verdict, "rubric": v.rubric, "note": v.note, "created_at": v.created_at} for v in votes] if own_vote or (adjudication and user.role == "admin" and len(votes) >= 2) else [],
+            "votes": [{"id": v.id, "reviewer_id": v.reviewer_id, "verdict": v.verdict, "rubric": v.rubric, "note": v.note, "created_at": v.created_at} for v in votes] if own_vote or (adjudication and user.role in ('admin', 'reviewer') and len(votes) >= 2) else [],
             "events": [{"action": e.action, "note": e.note, "created_at": e.created_at} for e in db.query(E).filter_by(contribution_id=item.id).order_by(E.id).all()],
             "consent": consent_of(item, meta),
+            "quality_reasons": quality_reasons(item.raw), "quality_policy": QUALITY_POLICY_VERSION,
             # Owner-only: lets the client match its pending local copy to the stored row.
             "client_ref": item.idempotency_key if item.owner_id == user.id else None,
             "meta": {"session_ref": meta.session_ref if meta else None, "duplicate_of": meta.duplicate_of if meta else None,
@@ -124,9 +130,12 @@ class ContributionInput(BaseModel):
     family: str = Field(default="", max_length=255)
     confidence: str = Field(default="", max_length=64)
     media_ids: list[str] = Field(default_factory=list, max_length=20)
+    question_kind: str = Field(default='', max_length=64)
+    question_format: str = Field(default='', max_length=32)
     session_ref: str | None = Field(default=None, max_length=128)
     parent_id: int | None = None
     idempotency_key: str = Field(min_length=8, max_length=128)
+    expected_owner_id: int | None = Field(default=None, ge=1)
 
 
 def required_fields(body: ContributionInput):
@@ -146,9 +155,29 @@ def normal(value):
 DUPLICATE_KEYS = ("original_text", "meaning", "standard_vi", "context", "region")
 
 
-def find_game_duplicate(db, item):
+def find_game_duplicate(db, item, *, batch=False):
     """First live, non-duplicate contribution with identical normalized content."""
     key = [normal(item.raw.get(k)) for k in DUPLICATE_KEYS]
+    if batch:
+        # One immutable duplicate index per atomic game submission, not one
+        # full ORM/JSON scan for each answer. Never reuse across transactions.
+        transaction = db.get_transaction()
+        cached = db.info.get('game_duplicate_index')
+        if cached is None or cached[0] is not transaction:
+            flagged = {cid for (cid,) in db.query(M.contribution_id).filter(M.duplicate_of.is_not(None)).all()}
+            index = {}
+            for other in db.query(C).filter(C.id != item.id, C.withdrawn_at.is_(None)).order_by(C.id):
+                if other.id not in flagged:
+                    identity = (other.raw.get('kind'), *(normal(other.raw.get(k)) for k in DUPLICATE_KEYS))
+                    index.setdefault(identity, other)
+            db.info['game_duplicate_index'] = (transaction, index)
+        else:
+            index = cached[1]
+        identity = (item.raw.get('kind'), *key)
+        duplicate = index.get(identity)
+        if duplicate is None:
+            index[identity] = item
+        return duplicate if duplicate is None or duplicate.id != item.id else None
     flagged = {cid for (cid,) in db.query(M.contribution_id).filter(M.duplicate_of.is_not(None)).all()}
     candidates = db.query(C).filter(C.id != item.id, C.withdrawn_at.is_(None)).order_by(C.id)
     for other in candidates:
@@ -178,40 +207,74 @@ def save_profile(body: ProfileInput, db: Session = Depends(get_db), user: User =
 
 @router.post("/contributions", status_code=201)
 def create(body: ContributionInput, db: Session = Depends(get_db), user: User = Depends(active)):
-    raw = body.model_dump(exclude={"idempotency_key", "parent_id", "session_ref"})
+    return save_contribution(body, db, user)
+
+
+def save_contribution(body: ContributionInput, db: Session, user, *, commit=True, authoritative_game=False, imported_source=None):
+    if imported_source is not None and (user.role not in ('admin', 'reviewer') or body.method != 'import' or imported_source.owner_id != user.id):
+        raise HTTPException(403, 'Nguồn nhập phải thuộc quản trị viên đang tiếp nhận')
+    if body.media_ids or body.consent_audio:
+        raise HTTPException(422, 'Pilot chỉ thu văn bản; chưa tiếp nhận tệp hoặc quyền sử dụng âm thanh')
+    if body.expected_owner_id is not None and body.expected_owner_id != user.id:
+        raise HTTPException(409, 'Phiên tài khoản đã thay đổi; mẫu vẫn thuộc tài khoản đã tạo trên máy')
+    raw = body.model_dump(exclude={"idempotency_key", "parent_id", "session_ref", "expected_owner_id"})
+    for key in ('question_kind', 'question_format'):
+        if not raw[key]: raw.pop(key)
     for key in ("region", *required_fields(body)):
         if not raw[key].strip():
             raise HTTPException(422, "Thiếu nội dung, nghĩa, bản phổ thông, ngữ cảnh hoặc nguồn")
-    request_hash = digest(body.model_dump())
+    hash_payload = body.model_dump()
+    hash_payload.pop('expected_owner_id', None)
+    for key in ('question_kind', 'question_format'):
+        if not hash_payload[key]: hash_payload.pop(key)
+    request_hash = digest(hash_payload)
     existing = db.query(C).filter_by(owner_id=user.id, idempotency_key=body.idempotency_key).first()
     if existing:
         if existing.request_hash != request_hash:
             raise HTTPException(409, "Mã gửi đã được dùng cho nội dung khác. Hãy bắt đầu lượt gửi mới.")
         return pack(existing, db, user)
-    if not body.consent_train and not (user.role == "admin" and body.method == "import"):
+    if not body.consent_train and not (user.role in ('admin', 'reviewer') and body.method == "import"):
         raise HTTPException(422, "Cần đồng ý sử dụng dữ liệu để huấn luyện trước khi gửi đóng góp mới.")
+    if body.session_ref:
+        from app.models.game import GameSession
+        if db.get(GameSession, body.session_ref) and not authoritative_game:
+            raise HTTPException(409, 'Mẫu của lượt mới phải được tạo bằng thao tác gửi bài trên máy chủ')
+        from app.models.dialect import DialectGameAllocation
+        allocation = db.get(DialectGameAllocation, body.session_ref)
+        if allocation and allocation.user_id != user.id:
+            raise HTTPException(403, 'Lượt chơi thuộc tài khoản khác')
+        if allocation and allocation.withdrawn_at:
+            raise HTTPException(409, 'Lượt đã rút; không tiếp nhận thêm mẫu')
     if body.parent_id:
         parent = find(db, body.parent_id)
         if parent.owner_id != user.id or parent.withdrawn_at:
             raise HTTPException(403, "Không thể tạo phiên bản cho mẫu này")
-    source = S(owner_id=user.id, evidence=body.source_evidence)
-    db.add(source)
-    db.flush()
+    source = imported_source
+    if source is None:
+        source = S(owner_id=user.id, evidence=body.source_evidence)
+        db.add(source)
+        db.flush()
     item = C(owner_id=user.id, source_id=source.id, parent_id=body.parent_id, raw=raw, idempotency_key=body.idempotency_key, request_hash=request_hash)
     db.add(item)
     try:
         db.flush()
-        duplicate = find_game_duplicate(db, item) if body.method == "game" else None
+        duplicate = find_game_duplicate(db, item, batch=authoritative_game) if body.method == "game" else None
+        reasons = quality_reasons(raw)
         if body.session_ref or duplicate:
             db.add(M(contribution_id=item.id, session_ref=body.session_ref, duplicate_of=duplicate.id if duplicate else None))
-        if duplicate:
+        if duplicate or reasons:
             # Same rule as the demo: an identical game answer is parked, not queued for review again.
             item.status = "HOLD"
         event(db, item, user, "SUBMITTED", "Đã tiếp nhận bản gốc và phạm vi đồng ý sử dụng")
+        if reasons:
+            event(db, item, user, 'QUALITY_HOLD', QUALITY_POLICY_VERSION + ': ' + ', '.join(reasons))
         if duplicate:
             event(db, item, user, "DUPLICATE", f"Trùng nội dung với mẫu #{duplicate.id}; tạm giữ, không vào hàng chờ duyệt")
-        db.commit()
+        if commit:
+            db.commit()
     except IntegrityError:
+        if not commit:
+            raise
         db.rollback()
         existing = db.query(C).filter_by(owner_id=user.id, idempotency_key=body.idempotency_key).first()
         if not existing or existing.request_hash != request_hash:
@@ -267,7 +330,7 @@ def queue(view: str = "pending", db: Session = Depends(get_db), user: User = Dep
     if view == "mine":
         q = q.filter(C.id.in_(voted))
     elif view == "disputes":
-        if user.role != "admin":
+        if user.role not in ('admin', 'reviewer'):
             raise HTTPException(403, "Chỉ điều phối viên xử lý bất đồng")
         ids = [cid for (cid,) in db.query(V.contribution_id).group_by(V.contribution_id).having(func.count(V.id) >= 2, func.count(func.distinct(V.verdict)) > 1).all()]
         q = q.filter(C.id.in_(ids), C.status == "REVIEW")
@@ -275,6 +338,9 @@ def queue(view: str = "pending", db: Session = Depends(get_db), user: User = Dep
         q = q.filter(C.status == "HOLD")
     else:
         q = q.filter(C.status.in_(["RAW", "REVIEW"]), ~C.id.in_(voted))
+    if user.role not in ('admin', 'reviewer') and view != 'mine':
+        assignment = db.get(DP, user.id)
+        q = q.filter(C.raw['region'].as_string() == assignment.review_region) if assignment and assignment.review_region else q.filter(C.id < 0)
     if region:
         q = q.filter(C.raw["region"].as_string() == region)
     if source_rights in ("confirmed", "pending"):
@@ -293,16 +359,24 @@ class VoteInput(BaseModel):
 
 @router.post("/reviews/{cid}/votes")
 def vote(cid: int, body: VoteInput, db: Session = Depends(get_db), user: User = Depends(reviewer)):
+    if db.get_bind().dialect.name == 'sqlite':
+        db.execute(text('BEGIN IMMEDIATE'))
     item = find(db, cid)
+    if db.get_bind().dialect.name != 'sqlite':
+        item = db.query(C).filter_by(id=cid).with_for_update().one()
+    from app.routers.dialect_review_ops import enforce_region
+    enforce_region(db, user, item)
     if item.owner_id == user.id:
         raise HTTPException(403, "Không được tự duyệt mẫu của mình")
     if item.withdrawn_at or item.status not in ("RAW", "REVIEW"):
         raise HTTPException(409, "Mẫu đã rút hoặc đã có quyết định; hãy tải lại")
+    if db.query(V).filter_by(contribution_id=cid).count() >= 2:
+        raise HTTPException(409, 'Đã đủ hai phiếu; cần phân xử nếu bất đồng')
     meta = db.get(M, cid)
     if meta and meta.duplicate_of:
         raise HTTPException(409, "Mẫu trùng không thuộc hàng chờ duyệt mới")
     participant = db.get(DP, user.id)
-    if user.role != "admin" and participant and participant.review_region and participant.review_region != item.raw.get("region"):
+    if user.role not in ('admin', 'reviewer') and participant and participant.review_region and participant.review_region != item.raw.get("region"):
         raise HTTPException(403, "Mẫu nằm ngoài vùng chuyên môn được giao")
     rubric = body.model_dump(exclude={"verdict", "note"})
     if body.verdict == "VERIFIED" and not all(rubric.values()):
@@ -326,6 +400,13 @@ def vote(cid: int, body: VoteInput, db: Session = Depends(get_db), user: User = 
 class DecisionInput(BaseModel):
     verdict: Literal["VERIFIED", "HOLD", "REJECT"]
     note: str = Field(min_length=1, max_length=5000)
+
+    @field_validator('note')
+    @classmethod
+    def meaningful_reason(cls, value):
+        if not value.strip():
+            raise ValueError('Phải ghi lý do phân xử cụ thể')
+        return value.strip()
 
 
 @router.post("/reviews/{cid}/finalize")
@@ -392,7 +473,7 @@ def exclusion_reasons(db, c, superseded):
         reasons.append("Đã rút mẫu")
     if c.status != "VERIFIED":
         reasons.append("Chưa xác minh nội dung")
-    if db.query(V).filter_by(contribution_id=c.id).count() < 2:
+    if db.query(V.reviewer_id).filter(V.contribution_id == c.id, V.reviewer_id != c.owner_id).distinct().count() < 2:
         reasons.append("Chưa đủ hai phiếu")
     if not db.get(S, c.source_id).rights_confirmed:
         reasons.append("Chưa xác nhận quyền nguồn")
@@ -423,14 +504,16 @@ CURATED_KEYS = ("text", "meaning", "standard", "context")
 
 
 def curated_ok(db, c):
+    from app.services.curation import valid_curated
     meta = db.get(M, c.id)
-    return bool(meta and meta.curated and all(str(meta.curated.get(k, "")).strip() for k in CURATED_KEYS))
+    return bool(meta and valid_curated(meta.curated))
 
 
 @router.get("/metrics")
 def metrics(db: Session = Depends(get_db), user: User = Depends(admin)):
     items = db.query(C).filter(C.withdrawn_at.is_(None)).all()
-    return {"submissions": len(items), "distinct": len({(unicodedata.normalize("NFC", c.raw["original_text"]).casefold(), c.raw["meaning"].casefold(), c.raw["region"]) for c in items}), "verified": sum(c.status == "VERIFIED" for c in items), "eligible": len(eligible(db)), "statuses": dict(Counter(c.status for c in items))}
+    from app.services.workspace_queries import statistics
+    return {"submissions": len(items), "distinct": len({(unicodedata.normalize("NFC", c.raw.get("original_text", "")).casefold(), c.raw.get("meaning", "").casefold(), c.raw.get("region", "")) for c in items}), "verified": sum(c.status == "VERIFIED" for c in items), "eligible": sum(curated_ok(db, c) for c in eligible(db)), "statuses": dict(Counter(c.status for c in items)), "game": statistics(db, user)}
 
 
 @router.get("/admin/contributions")
@@ -450,9 +533,11 @@ def participants(db: Session = Depends(get_db), user: User = Depends(admin), off
     q = db.query(User)
     if query:
         q = q.filter(User.full_name.contains(query))
-    if role in ("annotator", "reviewer", "admin"):
+    if role in STAFF_ROLES:
+        q = q.filter(User.role.in_(STAFF_ROLES))
+    elif role == "annotator":
         q = q.filter(User.role == role)
-    return {"total": q.count(), "items": [{"id": u.id, "full_name": u.full_name, "role": u.role, "account_status": u.account_status} for u in q.order_by(User.id).offset(max(0, offset)).limit(25)]}
+    return {"total": q.count(), "items": [{"id": u.id, "full_name": u.full_name, "role": canonical_role(u.role), "account_status": u.account_status} for u in q.order_by(User.id).offset(max(0, offset)).limit(25)]}
 
 
 class ReviewerRoleInput(BaseModel):
@@ -461,11 +546,15 @@ class ReviewerRoleInput(BaseModel):
 
 @router.post("/participants/{uid}/role")
 def reviewer_role(uid: int, body: ReviewerRoleInput, db: Session = Depends(get_db), user: User = Depends(admin)):
+    if db.get_bind().dialect.name == 'sqlite':
+        db.execute(text('BEGIN IMMEDIATE'))
+    else:
+        db.query(User).filter(User.role.in_(('admin', 'reviewer'))).with_for_update().all()
     target = db.get(User, uid)
     if not target:
         raise HTTPException(404, "Không tìm thấy tài khoản")
-    if target.role == "admin":
-        raise HTTPException(409, "Không thay quyền quản trị tại màn hình reviewer")
+    if target.role in ('admin', 'reviewer') and body.role == 'annotator' and db.query(User).filter(User.role.in_(('admin', 'reviewer')), User.account_status == 'active').count() <= 1:
+        raise HTTPException(409, "Cần giữ ít nhất một Reviewer")
     target.role = body.role
     db.commit()
     return {"id": target.id, "role": target.role}
@@ -484,25 +573,56 @@ def releases(db: Session = Depends(get_db), user: User = Depends(admin)):
              "affected_count": sum(record["id"] not in allowed for record in r.records), **release_meta(db, r)} for r in db.query(R).order_by(R.id.desc()).limit(100)]
 
 
+def release_grouping_items(db, items):
+    """Retain consented, reviewed duplicate/parent bridges without exporting them."""
+    universe = {c.id: c for c in items}
+    superseded = superseded_ids(db)
+    for c in db.query(C).filter(C.status == 'VERIFIED', C.withdrawn_at.is_(None)):
+        if c.id in universe:
+            continue
+        reasons = exclusion_reasons(db, c, superseded)
+        if all(reason.startswith('Trùng mẫu #') or reason == 'Có phiên bản bổ sung chưa rút' for reason in reasons):
+            universe[c.id] = c
+    return list(universe.values())
+
+
+def release_plan(db, ids=None, client_splits=None):
+    from app.services.dataset_release import build_release, RULE_VERSION
+    items = eligible(db)
+    if ids is None and not any(curated_ok(db, c) for c in items):
+        return {'records': [], 'splits': {}, 'data_card': '', 'warnings': ['Chưa có mẫu CURATED đủ điều kiện.'], 'rule_version': RULE_VERSION}
+    return build_release(db, items, ids, client_splits, grouping_items=release_grouping_items(db, items))
+
+
 def release_records(db):
-    return [{"id": c.id, "source_id": c.source_id, "raw": c.raw} for c in sorted(eligible(db), key=lambda c: c.id)]
+    return release_plan(db)['records']
+
+
+def preview_digest(plan):
+    return digest({'records': plan['records'], 'data_card': plan['data_card']})
 
 
 @router.get("/releases/preview")
 def preview_release(db: Session = Depends(get_db), user: User = Depends(admin), offset: int = 0):
-    records = release_records(db)
+    plan = release_plan(db)
+    records = plan["records"]
     allowed = {r["id"] for r in records}
     superseded = superseded_ids(db)
     rows = []
     excluded = Counter()
+    duplicates = {row['id']: row['representative_id'] for row in json.loads(plan['data_card']).get('deduplication', {}).get('excluded', [])} if plan['data_card'] else {}
     for c in db.query(C).order_by(C.id):
         reasons = exclusion_reasons(db, c, superseded)
+        if not curated_ok(db, c): reasons.append("Chưa chuẩn hóa đầy đủ")
+        if c.id in duplicates: reasons.append(f"Trùng bản chuẩn hóa của mẫu #{duplicates[c.id]}")
         if c.id not in allowed:
             excluded.update(reasons)
         rows.append({"id": c.id, "text": c.raw["original_text"], "region": c.raw["region"], "eligible": c.id in allowed, "reasons": reasons})
     start = max(0, offset)
     return {"eligible_count": len(records), "total": len(rows), "excluded_count": len(rows) - len(records),
-            "excluded_reasons": dict(excluded), "preview_digest": digest(records), "items": rows[start:start + 25]}
+            "excluded_reasons": dict(excluded), "preview_digest": preview_digest(plan), "items": rows[start:start + 25],
+            "ids": [r['id'] for r in records],
+            "splits": plan["splits"], "warnings": plan["warnings"], "data_card": plan["data_card"], "rule_version": plan["rule_version"]}
 
 
 class ReleaseInput(BaseModel):
@@ -514,40 +634,24 @@ class ReleaseInput(BaseModel):
 
 
 def curated_records(db, ids, splits):
-    allowed = {c.id: c for c in eligible(db)}
-    records = []
-    for cid in sorted(set(ids)):
-        c = allowed.get(cid)
-        if not c:
-            raise HTTPException(409, f"Mẫu #{cid} không còn đủ điều kiện xuất; hãy tải lại danh sách")
-        if not curated_ok(db, c):
-            raise HTTPException(409, f"Mẫu #{cid} chưa có bản chuẩn hóa đầy đủ")
-        meta = db.get(M, cid)
-        records.append({"id": c.id, "source_id": c.source_id, "raw": c.raw, "curated": meta.curated, "sense_id": meta.sense_id,
-                        "split": splits.get(str(cid), "train")})
-    return records
+    return release_plan(db, ids, splits)['records']
 
 
 @router.post("/releases", status_code=201)
 def release(body: ReleaseInput | None = None, db: Session = Depends(get_db), user: User = Depends(admin)):
-    curated = bool(body and body.ids is not None)
-    if curated:
-        if not body.ids:
-            raise HTTPException(409, "Chưa chọn mẫu để xuất")
-        records = curated_records(db, body.ids, body.splits)
-    else:
-        records = release_records(db)
-        if body and body.preview_digest and body.preview_digest != digest(records):
-            raise HTTPException(409, "Danh sách đủ điều kiện đã thay đổi. Hãy tải lại bản xem trước rồi xác nhận.")
-    if not records:
-        raise HTTPException(409, "Chưa có mẫu đủ QA, quyền sử dụng và đồng ý huấn luyện")
-    row = R(created_by=user.id, records=records, checksum=digest(records))
-    db.add(row)
-    db.flush()
-    if curated or (body and body.data_card):
-        db.add(RC(release_id=row.id, data_card=body.data_card if body else "", curated=curated))
+    if body and body.ids == []:
+        raise HTTPException(409, "Chưa chọn mẫu để xuất")
+    plan = release_plan(db, body.ids if body else None, body.splits if body else None)
+    if body and body.preview_digest and body.preview_digest != preview_digest(plan):
+        raise HTTPException(409, "Danh sách, quyền hoặc chính sách split đã thay đổi. Hãy tải lại bản xem trước.")
+    if not plan['records']:
+        raise HTTPException(409, "Chưa có mẫu CURATED đủ QA, quyền sử dụng và đồng ý huấn luyện")
+    row = R(created_by=user.id, records=plan['records'], checksum=digest(plan['records']))
+    db.add(row); db.flush()
+    db.add(RC(release_id=row.id, data_card=plan['data_card'], curated=True))
     db.commit()
-    return {"id": row.id, "count": len(records), "checksum": row.checksum}
+    return {"id": row.id, "count": len(row.records), "checksum": row.checksum,
+            "splits": plan['splits'], "warnings": plan['warnings'], "data_card": plan['data_card']}
 
 
 @router.get("/releases/{rid}")
@@ -555,11 +659,11 @@ def download(rid: int, db: Session = Depends(get_db), user: User = Depends(admin
     row = db.get(R, rid)
     if not row:
         raise HTTPException(404, "Không tìm thấy bản phát hành")
-    allowed = {c.id for c in eligible(db)}
-    if any(record["id"] not in allowed for record in row.records):
-        raise HTTPException(409, "Bản phát hành có mẫu đã rút, thay phiên bản hoặc thay đổi quyền; hãy tạo bản mới")
+    from app.services.dataset_release import validate_download
     meta = release_meta(db, row)
-    split_policy = "train/dev/test theo nhóm liên thông; chưa dùng làm benchmark/gold" if meta["curated"] else "unsplit; chưa dùng làm benchmark/gold"
-    return {"manifest": {"version": row.id, "created_at": row.created_at, "count": len(row.records), "sha256": row.checksum,
-                         "scope": "verified-training-candidates", "split_policy": split_policy, "data_card": meta["data_card"]},
-            "records": row.records}
+    if digest(row.records) != row.checksum:
+        raise HTTPException(409, 'Manifest không khớp dữ liệu; cần tạo bản xuất mới')
+    items = eligible(db)
+    validate_download(db, row.records, items, meta['data_card'], grouping_items=release_grouping_items(db, items))
+    from app.services.dataset_package import make_package
+    return make_package(row.id, row.created_at, row.records, meta['data_card'])

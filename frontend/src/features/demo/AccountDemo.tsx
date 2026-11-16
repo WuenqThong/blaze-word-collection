@@ -1,19 +1,14 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { Modal } from "react-bootstrap";
 import { apiClient, errorMessage } from "../../api/client";
 import { authApi } from "../../api/auth";
 import { useAuth } from "../auth/AuthContext";
-import { Field, Heading } from "./ui";
+import { Field } from "./ui";
 import { RegionOptions } from "./RegionOptions";
 import { REGION_CHOICES } from "./regions";
-
-const ROLE_LABEL: Record<string, string> = {
-  annotator: "Người góp",
-  reviewer: "Người kiểm duyệt",
-  admin: "Quản trị viên",
-};
-
-const joined = new Intl.DateTimeFormat("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Asia/Ho_Chi_Minh" });
+import { accountInitials } from "../auth/accountIdentity";
+import { useBlurValidation } from "../auth/useBlurValidation";
 
 /** One form's outcome: a success line or an error, never both. */
 function Result({ ok, error }: { ok: string; error: string }) {
@@ -48,8 +43,8 @@ function Section({ id, title, description, children }: { id: string; title: stri
   return (
     <section className="demo-settings-section" id={id} aria-labelledby={`${id}-title`}>
       <header>
-        <h2 id={`${id}-title`}>{title}</h2>
-        {description && <p>{description}</p>}
+        <div><h2 id={`${id}-title`}>{title}</h2>
+        {description && <p>{description}</p>}</div>
       </header>
       {children}
     </section>
@@ -57,31 +52,50 @@ function Section({ id, title, description, children }: { id: string; title: stri
 }
 
 export function AccountDemo() {
+  const { hash, pathname } = useLocation();
+  const navigate = useNavigate();
+  return <AccountSettingsModal initialSection={hash.slice(1) || "ho-so"} onHide={() => navigate(pathname.startsWith("/demo") ? "/demo" : "/dashboard", { replace: true })} />;
+}
+
+export function AccountSettingsModal({ onHide, initialSection = "ho-so" }: { onHide: () => void; initialSection?: string }) {
   const { user } = useAuth();
-  const { hash } = useLocation();
-  // "Cài đặt" in the account menu links to #cai-dat. The layout scrolls to the
-  // top on route change after this effect, so wait a frame before jumping.
+  const [entered, setEntered] = useState(false);
+  const [activeSection, setActiveSection] = useState(initialSection);
+  const sections = [
+    { id: "ho-so", label: "Cá nhân", icon: "person" },
+    { id: "cai-dat", label: "Phương ngữ", icon: "geo-alt" },
+    { id: "mat-khau", label: "Bảo mật", icon: "shield-lock" },
+  ];
+  function goToSection(id: string) {
+    setActiveSection(id);
+    document.getElementById(id)?.scrollIntoView({ block: "start" });
+  }
   useEffect(() => {
-    if (!hash) return;
-    const id = window.setTimeout(() => {
-      const target = document.getElementById(decodeURIComponent(hash.slice(1)));
-      target?.scrollIntoView({ block: "start" });
-      target?.querySelector<HTMLElement>("select, input")?.focus({ preventScroll: true });
-    }, 50);
-    return () => window.clearTimeout(id);
-  }, [hash]);
-  if (!user) return null; // DemoLayout already redirects signed-out visitors.
+    if (!entered || initialSection === "ho-so") return;
+    const target = document.getElementById(initialSection);
+    target?.scrollIntoView({ block: "start" });
+    target?.querySelector<HTMLElement>("input, select, button")?.focus({ preventScroll: true });
+  }, [entered, initialSection]);
+  if (!user) return null;
   return (
-    <>
-      <Heading title="Hồ sơ & cài đặt">
-        <p>Thông tin tài khoản, vùng của bạn và mật khẩu đăng nhập.</p>
-      </Heading>
-      <div className="demo-settings">
-        <ProfileForm />
-        <RegionForm />
-        <PasswordForm />
+    <Modal show onHide={onHide} onEntered={() => setEntered(true)} centered className="bz-settings-overlay" dialogClassName="bz-settings-dialog" contentClassName="bz-settings-modal" aria-labelledby="account-settings-title">
+      <aside className="bz-settings-sidebar">
+        <h2>Cài đặt</h2>
+        <p className="bz-settings-nav-caption">Tài khoản của bạn</p>
+        <nav aria-label="Cài đặt tài khoản">{sections.map(section => <button key={section.id} type="button" aria-current={activeSection === section.id ? "location" : undefined} onClick={() => goToSection(section.id)}><i className={`bi bi-${section.icon}`} aria-hidden="true" />{section.label}</button>)}</nav>
+      </aside>
+      <div className="bz-settings-pane">
+        <header className="bz-settings-title"><h1 id="account-settings-title">Cài đặt tài khoản</h1><button type="button" className="btn-close" aria-label="Đóng cài đặt" onClick={onHide} /></header>
+        <div className="bz-settings-scroll">
+          <div className="bz-settings-identity"><span className="demo-avatar" aria-hidden="true">{accountInitials(user.full_name)}</span><div><strong>{user.full_name}</strong><span>Quản lý thông tin cá nhân và bảo mật.</span></div></div>
+          <div className="bz-profile"><div className="demo-settings">
+            <ProfileForm />
+            <RegionForm />
+            <PasswordForm initiallyOpen={initialSection === "mat-khau"} />
+          </div></div>
+        </div>
       </div>
-    </>
+    </Modal>
   );
 }
 
@@ -89,25 +103,24 @@ function ProfileForm() {
   const { user, updateUser } = useAuth();
   const [name, setName] = useState(user!.full_name);
   const form = useForm();
+  const validation = useBlurValidation({ name: () => name.trim() ? "" : "Nhập tên bạn muốn hiển thị." });
   const unchanged = name.trim().replace(/\s+/g, " ") === user!.full_name;
   return (
-    <Section id="ho-so" title="Thông tin tài khoản" description="Tên hiển thị là tên người khác thấy khi bạn góp và duyệt. Email và vai trò do quản trị viên quản lý.">
-      <form onSubmit={(e) => form.submit(e, async () => {
+    <Section id="ho-so" title="Thông tin cá nhân">
+      <form noValidate aria-busy={form.busy} onSubmit={(e) => { e.preventDefault(); if (!validation.validate(e)) return; void form.submit(e, async () => {
         updateUser(await authApi.updateMe({ full_name: name }));
         return "Đã lưu tên hiển thị.";
-      })}>
+      }); }}>
         <Field label="Tên hiển thị">
-          <input value={name} required maxLength={255} autoComplete="name"
+          <input name="name" value={name} required maxLength={255} autoComplete="name" disabled={form.busy}
+            onBlur={() => validation.blur("name")} aria-invalid={!!validation.errors.name} aria-describedby={validation.errors.name ? "profile-name-error" : undefined}
             onChange={(e) => { setName(e.target.value); form.touch(); }} />
         </Field>
-        <dl className="demo-definition">
-          <div><dt>Email đăng nhập</dt><dd>{user!.email}</dd></div>
-          <div><dt>Vai trò</dt><dd>{ROLE_LABEL[user!.role] ?? user!.role}</dd></div>
-          <div><dt>Tham gia từ</dt><dd>{joined.format(new Date(user!.created_at))}</dd></div>
-        </dl>
+        {validation.errors.name && <p className="bz-field-error" id="profile-name-error" role="alert">{validation.errors.name}</p>}
+        <Field label="Email đăng nhập"><input type="email" aria-label="Email đăng nhập" value={user!.email} readOnly aria-describedby="profile-email-note" /><span className="bz-field-note" id="profile-email-note"><i className="bi bi-lock" aria-hidden="true" /> Liên hệ quản trị viên nếu cần đổi email.</span></Field>
         <Result ok={form.ok} error={form.error} />
         <button className="btn btn-primary" disabled={form.busy || unchanged || !name.trim()}>
-          {form.busy ? "Đang lưu…" : "Lưu tên"}
+          {form.busy ? "Đang lưu…" : "Lưu thay đổi"}
         </button>
       </form>
     </Section>
@@ -130,10 +143,10 @@ function RegionForm() {
   }, [attempt]);
   const fields: [keyof Regions, string][] = [
     ["upbringing_area", "Nơi bạn lớn lên"],
-    ["usage_area", "Nơi bạn thường nghe hoặc dùng phương ngữ"],
+    ["usage_area", "Nơi thường nghe hoặc dùng phương ngữ"],
   ];
   return (
-    <Section id="cai-dat" title="Vùng của bạn" description="Không bắt buộc. Giúp người duyệt hiểu bối cảnh cách nói bạn góp. Chỉ cần quận/huyện, không cần địa chỉ.">
+    <Section id="cai-dat" title="Vùng phương ngữ" description="Thông tin tự nguyện, chỉ cần quận/huyện.">
       {loadError ? (
         <>
           <p className="demo-error" role="alert">{loadError}</p>
@@ -142,13 +155,13 @@ function RegionForm() {
       ) : !regions ? (
         <p role="status">Đang tải…</p>
       ) : (
-        <form onSubmit={(e) => form.submit(e, async () => {
+        <form aria-busy={form.busy} onSubmit={(e) => form.submit(e, async () => {
           await apiClient.put("/dialect/profile", regions);
           return "Đã lưu vùng của bạn.";
         })}>
           {fields.map(([key, label]) => (
             <Field key={key} label={label}>
-              <select value={regions[key]} onChange={(e) => { setRegions({ ...regions, [key]: e.target.value }); form.touch(); }}>
+              <select value={regions[key]} disabled={form.busy} onChange={(e) => { setRegions({ ...regions, [key]: e.target.value }); form.touch(); }}>
                 <option value="">Chưa chọn</option>
                 {/* Values saved as free text from the older /settings form stay selectable. */}
                 {regions[key] && !REGION_CHOICES.includes(regions[key]) && <option value={regions[key]}>{regions[key]} (đã lưu)</option>}
@@ -164,39 +177,47 @@ function RegionForm() {
   );
 }
 
-function PasswordForm() {
+function PasswordForm({ initiallyOpen = false }: { initiallyOpen?: boolean }) {
+  const [open, setOpen] = useState(initiallyOpen);
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
   const form = useForm();
-  const mismatch = !!confirm && next !== confirm;
-  const tooShort = !!next && next.length < 6;
+  const validation = useBlurValidation({
+    current: () => current ? "" : "Nhập mật khẩu hiện tại.",
+    next: () => next.length >= 6 ? "" : "Nhập mật khẩu mới có ít nhất 6 ký tự.",
+    confirm: () => !confirm ? "Nhập lại mật khẩu mới." : next === confirm ? "" : "Hai mật khẩu mới chưa khớp. Nhập giống ô Mật khẩu mới.",
+  });
   return (
-    <Section id="mat-khau" title="Đổi mật khẩu" description="Sau khi đổi, bạn vẫn đăng nhập trên máy này. Lần đăng nhập sau hãy dùng mật khẩu mới.">
-      <form onSubmit={(e) => form.submit(e, async () => {
+    <Section id="mat-khau" title="Bảo mật">
+      <div className="bz-password-row"><div><strong>Mật khẩu</strong><p>Đổi mật khẩu bạn dùng để đăng nhập.</p></div><button type="button" className="btn btn-outline-secondary" aria-expanded={open} aria-controls="account-password-form" onClick={() => setOpen(!open)}>{open ? "Thu gọn" : "Đổi mật khẩu"}</button></div>
+      {open && <form id="account-password-form" noValidate aria-busy={form.busy} onSubmit={(e) => { e.preventDefault(); if (!validation.validate(e)) return; void form.submit(e, async () => {
         await authApi.changePassword({ current_password: current, new_password: next });
         setCurrent(""); setNext(""); setConfirm("");
         return "Đã đổi mật khẩu.";
-      })}>
+      }); }}>
         <Field label="Mật khẩu hiện tại">
-          <input type="password" autoComplete="current-password" required value={current}
+          <input name="current" type="password" autoComplete="current-password" required value={current} disabled={form.busy}
+            onBlur={() => validation.blur("current")} aria-invalid={!!validation.errors.current} aria-describedby={validation.errors.current ? "password-current-error" : undefined}
             onChange={(e) => { setCurrent(e.target.value); form.touch(); }} />
         </Field>
+        {validation.errors.current && <p className="bz-field-error" id="password-current-error" role="alert">{validation.errors.current}</p>}
         <Field label="Mật khẩu mới (ít nhất 6 ký tự)">
-          <input type="password" autoComplete="new-password" required minLength={6} maxLength={128} value={next}
-            aria-invalid={tooShort} onChange={(e) => { setNext(e.target.value); form.touch(); }} />
+          <input name="next" type="password" autoComplete="new-password" required minLength={6} maxLength={128} value={next} disabled={form.busy}
+            onBlur={() => validation.blur("next")} aria-invalid={!!validation.errors.next} aria-describedby={validation.errors.next ? "password-next-error" : undefined} onChange={(e) => { setNext(e.target.value); form.touch(); }} />
         </Field>
+        {validation.errors.next && <p className="bz-field-error" id="password-next-error" role="alert">{validation.errors.next}</p>}
         <Field label="Nhập lại mật khẩu mới">
-          <input type="password" autoComplete="new-password" required value={confirm}
-            aria-invalid={mismatch} aria-describedby={mismatch ? "password-mismatch" : undefined}
+          <input name="confirm" type="password" autoComplete="new-password" required value={confirm} disabled={form.busy}
+            onBlur={() => validation.blur("confirm")} aria-invalid={!!validation.errors.confirm} aria-describedby={validation.errors.confirm ? "password-mismatch" : undefined}
             onChange={(e) => { setConfirm(e.target.value); form.touch(); }} />
         </Field>
-        {mismatch && <p className="demo-error" id="password-mismatch">Hai mật khẩu mới chưa khớp.</p>}
+        {validation.errors.confirm && <p className="bz-field-error" id="password-mismatch" role="alert">{validation.errors.confirm}</p>}
         <Result ok={form.ok} error={form.error} />
-        <button className="btn btn-primary" disabled={form.busy || !current || tooShort || !next || mismatch || !confirm}>
+        <button className="btn btn-primary" disabled={form.busy}>
           {form.busy ? "Đang đổi…" : "Đổi mật khẩu"}
         </button>
-      </form>
+      </form>}
     </Section>
   );
 }
