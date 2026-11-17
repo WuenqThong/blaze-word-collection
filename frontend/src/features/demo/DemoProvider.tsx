@@ -23,7 +23,6 @@ function check(b: Binding) { if (!active(b)) throw Error("Phiên tài khoản đ
 async function synchronize(b: Binding, reportError: (message: string | null) => void) {
     check(b);
     if (!server.SERVER_ENABLED || !b.account) return;
-    if ((await repository().load()).simulate === "offline") throw Error("Đang mô phỏng mất mạng; bản gốc vẫn được giữ trên máy.");
     check(b);
     const user = await authApi.me();
     check(b);
@@ -130,8 +129,7 @@ export function DemoProvider({ children, account }: { children: ReactNode; accou
       try {
         const repo = repository();
         const before = await repo.load(); check(b);
-        if (b.account !== undefined && !b.account && command.type !== "simulate") throw Error("Vui lòng đăng nhập để tiếp tục.");
-        if (b.account !== undefined && command.type === "actor" && !["admin", "reviewer"].includes(b.account?.role ?? "")) throw Error("Bạn không có quyền đổi vai trò.");
+        if (b.account !== undefined && !b.account) throw Error("Vui lòng đăng nhập để tiếp tục.");
         if (live && b.account && (server.runsOnServer(command) || ["start", "autoStart", "submit", "contribute"].includes(command.type))) {
           const me = await authApi.me(); check(b);
           if (me.id !== b.account.id) throw Error("Phiên đăng nhập đã thay đổi.");
@@ -164,10 +162,10 @@ export function DemoProvider({ children, account }: { children: ReactNode; accou
             return server.accountView(await repo.load(), b.account.id);
           }
         }
-        if (command.type === "start" && live && b.account && before.simulate !== "offline") {
+        if (command.type === "start" && live && b.account) {
           try { await server.allocate(command.id, [command.examId], [], command.campaignId, b.account.id); check(b); allocated = true; } catch { check(b); }
         }
-        if (command.type === "autoStart" && live && b.account && before.simulate !== "offline") {
+        if (command.type === "autoStart" && live && b.account) {
           const local = gameAllocation(before, before.actor, command.campaignId);
           if (!local.pending && local.pool.length) {
             try {
@@ -177,7 +175,6 @@ export function DemoProvider({ children, account }: { children: ReactNode; accou
           }
         }
         if (live && server.runsOnServer(command)) {
-          if (before.simulate === "offline") throw Error("Đang mô phỏng mất mạng.");
           await server.execute(command, before, b.account!); check(b);
           await synchronize(b, setError);
         } else {

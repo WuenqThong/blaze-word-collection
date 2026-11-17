@@ -25,10 +25,10 @@ function ParticipantRow({ person }: { person: Person }) {
   const [baseline, setBaseline] = useState(person);
   const [confirm, setConfirm] = useState(false);
   const [saved, setSaved] = useState(false);
-  const dirty = ["role", "region", "verified", "risk"].some(key => draft[key as keyof Person] !== person[key as keyof Person]);
+  const dirty = ["role", "region", "verified", "risk", "operations"].some(key => draft[key as keyof Person] !== person[key as keyof Person]);
   function change(value: Partial<Person>) { setDraft({ ...draft, ...value }); setSaved(false); }
   return <><tr><td>{person.name}<small>{live ? `Mã người dùng #${person.id.slice(8)}` : person.id}</small></td>
-    <td><select aria-label={`Vai trò ${person.name}`} value={draft.role === "admin" ? "reviewer" : draft.role} disabled={person.id === "guest"} onChange={e => change({ role: e.target.value as Person["role"] })}>{!live && <option value="guest">Khách</option>}<option value="contributor">Người góp</option><option value="reviewer">Reviewer</option></select></td>
+    <td><select aria-label={`Vai trò ${person.name}`} value={draft.role === "admin" ? "reviewer" : draft.role} disabled={person.id === "guest"} onChange={e => change({ role: e.target.value as Person["role"], operations: e.target.value === "contributor" ? false : draft.operations })}>{!live && <option value="guest">Khách</option>}<option value="contributor">Người góp</option><option value="reviewer">Reviewer</option></select>{live && ["reviewer", "admin"].includes(draft.role) && <label className="demo-checkbox"><input type="checkbox" checked={!!draft.operations} onChange={e=>change({operations:e.target.checked})}/>Quyền vận hành</label>}</td>
     <td><label className="demo-checkbox"><input type="checkbox" checked={draft.verified} onChange={e => change({ verified: e.target.checked })}/>Đã xác nhận tài khoản</label><select aria-label={`Rủi ro ${person.name}`} value={draft.risk} onChange={e => change({ risk: e.target.value as Person["risk"] })}><option value="clear">Bình thường</option><option value="hold">Tạm giữ kiểm tra</option></select>
       <div className="demo-actions"><Action disabled={!dirty} onClick={() => setConfirm(true)}>Lưu thay đổi</Action>{dirty && <button type="button" className="btn btn-link" onClick={() => { setDraft(person); setBaseline(person); }}>Hủy sửa</button>}</div>{saved && <p role="status">Đã lưu thay đổi.</p>}
     </td></tr>
@@ -123,6 +123,7 @@ function SettingsInner() {
           </Field>
           <Field label="Chứng cứ / tác giả / URL / vị trí trích">
             <textarea
+              readOnly={live && source.id.startsWith("s:")}
               value={source.evidence}
               onChange={(e) =>
                 setSource({ ...source, evidence: e.target.value })

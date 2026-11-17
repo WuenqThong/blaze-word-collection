@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Modal } from "react-bootstrap";
 import { apiClient, errorMessage } from "../../api/client";
@@ -89,9 +89,9 @@ export function AccountSettingsModal({ onHide, initialSection = "ho-so" }: { onH
         <div className="bz-settings-scroll">
           <div className="bz-settings-identity"><span className="demo-avatar" aria-hidden="true">{accountInitials(user.full_name)}</span><div><strong>{user.full_name}</strong><span>Quản lý thông tin cá nhân và bảo mật.</span></div></div>
           <div className="bz-profile"><div className="demo-settings">
-            <ProfileForm />
-            <RegionForm />
-            <PasswordForm initiallyOpen={initialSection === "mat-khau"} />
+            <ProfileForm key={`profile.${user.id}`} />
+            <RegionForm key={`region.${user.id}`} />
+            <PasswordForm key={`password.${user.id}`} initiallyOpen={initialSection === "mat-khau"} />
           </div></div>
         </div>
       </div>
@@ -101,6 +101,8 @@ export function AccountSettingsModal({ onHide, initialSection = "ho-so" }: { onH
 
 function ProfileForm() {
   const { user, updateUser } = useAuth();
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const [name, setName] = useState(user!.full_name);
   const form = useForm();
   const validation = useBlurValidation({ name: () => name.trim() ? "" : "Nhập tên bạn muốn hiển thị." });
@@ -108,7 +110,8 @@ function ProfileForm() {
   return (
     <Section id="ho-so" title="Thông tin cá nhân">
       <form noValidate aria-busy={form.busy} onSubmit={(e) => { e.preventDefault(); if (!validation.validate(e)) return; void form.submit(e, async () => {
-        updateUser(await authApi.updateMe({ full_name: name }));
+        const updated = await authApi.updateMe({ full_name: name }, user!.id);
+        if (mounted.current) updateUser(updated);
         return "Đã lưu tên hiển thị.";
       }); }}>
         <Field label="Tên hiển thị">
@@ -130,17 +133,19 @@ function ProfileForm() {
 type Regions = { upbringing_area: string; usage_area: string };
 
 function RegionForm() {
+  const { user } = useAuth();
+  const accountId = user!.id;
   const [regions, setRegions] = useState<Regions | null>(null);
   const [loadError, setLoadError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const form = useForm();
   useEffect(() => {
     let current = true;
-    apiClient.get<Regions>("/dialect/profile")
+    apiClient.get<Regions>("/dialect/profile", { headers: { "X-Account-ID": String(accountId) } })
       .then(({ data }) => { if (current) { setRegions(data); setLoadError(""); } })
       .catch((err) => { if (current) setLoadError(errorMessage(err)); });
     return () => { current = false; };
-  }, [attempt]);
+  }, [attempt, accountId]);
   const fields: [keyof Regions, string][] = [
     ["upbringing_area", "Nơi bạn lớn lên"],
     ["usage_area", "Nơi thường nghe hoặc dùng phương ngữ"],
@@ -156,7 +161,7 @@ function RegionForm() {
         <p role="status">Đang tải…</p>
       ) : (
         <form aria-busy={form.busy} onSubmit={(e) => form.submit(e, async () => {
-          await apiClient.put("/dialect/profile", regions);
+          await apiClient.put("/dialect/profile", regions, { headers: { "X-Account-ID": String(user!.id) } });
           return "Đã lưu vùng của bạn.";
         })}>
           {fields.map(([key, label]) => (
@@ -178,6 +183,7 @@ function RegionForm() {
 }
 
 function PasswordForm({ initiallyOpen = false }: { initiallyOpen?: boolean }) {
+  const { user } = useAuth();
   const [open, setOpen] = useState(initiallyOpen);
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -192,7 +198,7 @@ function PasswordForm({ initiallyOpen = false }: { initiallyOpen?: boolean }) {
     <Section id="mat-khau" title="Bảo mật">
       <div className="bz-password-row"><div><strong>Mật khẩu</strong><p>Đổi mật khẩu bạn dùng để đăng nhập.</p></div><button type="button" className="btn btn-outline-secondary" aria-expanded={open} aria-controls="account-password-form" onClick={() => setOpen(!open)}>{open ? "Thu gọn" : "Đổi mật khẩu"}</button></div>
       {open && <form id="account-password-form" noValidate aria-busy={form.busy} onSubmit={(e) => { e.preventDefault(); if (!validation.validate(e)) return; void form.submit(e, async () => {
-        await authApi.changePassword({ current_password: current, new_password: next });
+        await authApi.changePassword({ current_password: current, new_password: next }, user!.id);
         setCurrent(""); setNext(""); setConfirm("");
         return "Đã đổi mật khẩu.";
       }); }}>

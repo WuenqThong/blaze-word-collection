@@ -13,6 +13,7 @@ from app.core.database import utcnow
 from app.models.game import GameResource as Resource, GameResourceVersion as Version, GameSession as Play
 from app.models.dialect import DialectGameAllocation as Allocation, DialectGameReceipt as Receipt
 from app.services.game_original import OPEN_KINDS, question_original
+from app.services.player_content import player_question_allowed
 
 CLASSIC = ['GATE', 'GATE', 'GATE', 'LEXEME', 'LEXEME', 'GOLD', 'SENTENCE', 'GOLD', 'OPEN_WORD', 'OPEN_SENTENCE']
 SOURCED = ['GATE', 'GATE', 'LEXEME', 'LEXEME', 'LEXEME', 'SENTENCE', 'SENTENCE', 'LEXEME', 'OPEN_WORD', 'OPEN_SENTENCE']
@@ -176,6 +177,8 @@ def blank_answer():
 
 
 def pack_session(row, user):
+    from sqlalchemy.orm import object_session
+    from app.services.staff_access import can_operate
     data = deepcopy(row.data)
     data.update(deepcopy(row.snapshot))
     for q in data['questions']:
@@ -185,7 +188,7 @@ def pack_session(row, user):
     data.update({'id':row.session_ref, 'owner':f'account:{row.user_id}', 'serverRevision':row.revision, 'serverAllocated':True, 'serverPending':[], 'recovery':'', 'receipts':{'started':{'done':True}}})
     if data['state'] == 'submitted': data['receipts']['submitted'] = {'done':True}
     if data['state'] == 'withdrawn': data['receipts']['withdraw'] = {'done':True}
-    if user.role not in ('admin', 'reviewer'):
+    if not can_operate(object_session(row), user):
         for q in data['questions']:
             q['accepted'] = []
             q.pop('correctOptionId', None)
@@ -224,13 +227,24 @@ def start_session(db, body, user):
     attempts = [a for p in prior for answer in p.data['answers'] for a in answer.get('attempts', []) if a.get('correct') is not None]
     target = 2 if attempts and sum(a['correct'] is True for a in attempts) / len(attempts) >= .8 else 1
     used = set()
+    all_questions = [r.data for r in db.query(Resource).filter_by(kind='question')]
+    allowed = {q['id'] for q in all_questions if player_question_allowed(q)}
     for i, original in enumerate(questions):
         if exam.get('adaptive') or (campaign and campaign.data.get('mode') == 'adaptive'):
             candidates = [r.data for r in db.query(Resource).filter_by(kind='question') if r.data.get('kind') == original['kind'] and r.data.get('region') == exam.get('region') and r.data.get('demo') == exam.get('demo') and r.data.get('approval') != 'DRAFT' and r.key not in used and not question_errors(r.data)]
+            candidates = [q for q in candidates if q['id'] in allowed]
             if candidates: questions[i] = deepcopy(min(candidates, key=lambda q: (abs(q.get('difficulty',1)-target),q['id'] in seen,digest([body.session_ref,q['id']]))))
         elif exam.get('layout') == 'sourced2' and original['kind'] == 'GATE':
             candidates = [r.data for r in db.query(Resource).filter_by(kind='question') if r.data.get('kind') == 'GATE' and r.data.get('format') == original.get('format') and r.data.get('provenance', {}).get('verification') == 'sourced' and r.data.get('approval') != 'DRAFT' and r.key not in used and not question_errors(r.data)]
+            candidates = [q for q in candidates if q['id'] in allowed and q.get('demo') == exam.get('demo')]
             if candidates: questions[i] = deepcopy(min(candidates, key=lambda q: (q['id'] in seen, digest([body.session_ref,q['id']]))))
+        if questions[i]['id'] not in allowed or questions[i]['id'] in used:
+            candidates = [q for q in all_questions if q['id'] in allowed and q['id'] not in used
+                          and all(q.get(field) == original.get(field) for field in ('kind', 'format', 'region', 'demo', 'sourceId'))
+                          and q.get('approval') != 'DRAFT' and not question_errors(q)]
+            if not candidates:
+                raise HTTPException(409, 'Chưa có đủ câu hỏi phù hợp để mở lượt chơi. Vui lòng thử lại sau.')
+            questions[i] = deepcopy(min(candidates, key=lambda q: digest([body.session_ref, q['id']])))
         used.add(questions[i]['id'])
         bank_source = db.get(Resource, ('bank_source', questions[i].get('sourceId', '')))
         if bank_source:
@@ -244,7 +258,7 @@ def start_session(db, body, user):
     db.flush()
     db.add(Receipt(session_ref=body.session_ref,user_id=user.id,started_at=utcnow()))
     data = {'answers':[blank_answer() for _ in questions], 'cursor':0, 'consent':body.consent, 'region':'', 'upbringing':'', 'usage':'', 'state':'playing', 'createdAt':utcnow().isoformat()+'Z', 'submittedAt':None, 'campaignId':body.campaign_id, 'repeat':exam['id'] in finished}
-    regions = deepcopy(db.get(Resource, ('taxonomy','default')).data['regions']) + ['Không chắc / nhiều nơi']
+    regions = deepcopy(db.get(Resource, ('taxonomy','default')).data['regions']) + ['Không chắc']
     row = Play(session_ref=body.session_ref,user_id=user.id,start_hash=body_hash,revision=1,snapshot={'exam':exam,'questions':questions,'allowedRegions':regions},data=data)
     db.add(row); db.commit()
     return pack_session(row,user)

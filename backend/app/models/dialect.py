@@ -1,5 +1,5 @@
 """Text contributions are separate from legacy audio annotations."""
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, event
 from app.core.database import Base, utcnow
 
 
@@ -57,6 +57,25 @@ class DialectEvent(Base):
     created_at = Column(DateTime, default=utcnow, nullable=False)
 
 
+class DialectReviewArchive(Base):
+    """Immutable completed review epochs; DialectVote contains current votes only."""
+    __tablename__ = "dialect_review_archives"
+    contribution_id = Column(Integer, ForeignKey("dialect_contributions.id"), primary_key=True)
+    revision = Column(Integer, primary_key=True)
+    digest = Column(String(64), nullable=False)
+    content = Column(JSON, nullable=False)
+    votes = Column(JSON, nullable=False)
+    status = Column(String(16), nullable=False)
+    actor_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=utcnow, nullable=False)
+
+
+@event.listens_for(DialectReviewArchive, 'before_update')
+@event.listens_for(DialectReviewArchive, 'before_delete')
+def immutable_review_archive(mapper, connection, target):
+    raise ValueError('Review archives are immutable')
+
+
 class DialectRelease(Base):
     __tablename__ = "dialect_releases"
     id = Column(Integer, primary_key=True)
@@ -66,8 +85,8 @@ class DialectRelease(Base):
     checksum = Column(String(64), nullable=False)
 
 
-# --- Side tables added for the /demo workspace. No Alembic yet, so existing
-# tables stay untouched and new state lives in tables that create_all can add.
+# --- Side tables for the /demo workspace. Production schema changes are
+# versioned through backend/migrations; create_all is for development and tests.
 
 class DialectContributionMeta(Base):
     """Server-managed state next to an immutable RAW contribution."""

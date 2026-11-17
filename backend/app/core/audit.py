@@ -41,6 +41,9 @@ def audit_changes(session, flush_context):
         if not changed and row not in session.new:
             continue
         details = {'fields': changed, 'operation': 'create' if row in session.new else 'update'}
+        if table == 'dialect_settings' and row.key.startswith('operations:'):
+            action = 'OPERATIONS_ACCESS_CHANGED'
+            details['enabled'] = row.value is True
         # Retain only purpose flags / role/status, never arbitrary field contents.
         for name in changed:
             value = getattr(row, name)

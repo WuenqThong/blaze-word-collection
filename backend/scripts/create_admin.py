@@ -1,9 +1,9 @@
-"""Create or promote an admin user.
+"""Create or designate an operational Reviewer.
 
 Usage:
     .venv/bin/python -m scripts.create_admin <email> <password> <full_name>
 
-Nếu email đã tồn tại, sẽ promote user đó lên role=admin (giữ nguyên password cũ).
+Existing accounts keep their password; operational access is explicitly granted.
 """
 import sys
 from datetime import datetime
@@ -12,6 +12,7 @@ from app.core.database import SessionLocal, init_db
 from app.core import audit  # noqa: F401
 from app.core.security import hash_password
 from app.models import User
+from app.services.staff_access import designate_operator
 
 
 def main(email: str, password: str, full_name: str) -> None:
@@ -22,6 +23,7 @@ def main(email: str, password: str, full_name: str) -> None:
         user = db.query(User).filter(User.email == email).first()
         if user:
             user.role = "reviewer"
+            designate_operator(db, user)
             db.commit()
             print(f"[ok] Promoted existing user '{email}' -> reviewer")
             return
@@ -34,6 +36,8 @@ def main(email: str, password: str, full_name: str) -> None:
             created_at=datetime.utcnow(),
         )
         db.add(user)
+        db.flush()
+        designate_operator(db, user)
         db.commit()
         print(f"[ok] Created reviewer '{email}'")
     finally:

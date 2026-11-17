@@ -12,5 +12,19 @@
 **/.vite*
 docs
 ml
-test-fixtures
-.claude
+# Private local assistant files and editor visibility settings.
+*[cC][lL][aA][uU][dD][eE]*
+**/*[cC][lL][aA][uU][dD][eE]*
+**/.vscode/settings.json
+# Private design sources must never enter the Docker build context.
+designs
+.github
+scripts
+**/*.log
+**/*.zip
+**/*.sha256
+**/.pytest_cache
+**/.ruff_cache
+**/*.tsbuildinfo
+backups
+releases

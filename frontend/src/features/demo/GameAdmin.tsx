@@ -603,7 +603,7 @@ function SessionAdminInner() {
             Gửi: {selected.submittedAt ? new Date(selected.submittedAt).toLocaleString("vi-VN") : "Chưa gửi"}
           </p>
           <p>
-            Hiện sống: {selected.region} · Lớn lên: {selected.upbringing} · Dùng
+            Vùng mẫu: {selected.region} · Lớn lên: {selected.upbringing} · Dùng
             phương ngữ: {selected.usage}
           </p>
           <AnswerTable session={selected} showQuality />

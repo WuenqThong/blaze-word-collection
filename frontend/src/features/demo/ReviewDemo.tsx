@@ -4,6 +4,7 @@ import { BulkReviewControls } from "../dialect/ReviewPage";
 import { useSearchParams } from "react-router-dom";
 import { useDemo } from "./context";
 import { blankRaw, consentDefault } from "./seed";
+import { reviewDigest, reviewDraftKey } from "./reviewVersion";
 import { duplicates, exclusionReasons } from "./domain";
 import { Action, DemoGuard, Field, Heading, Panel } from "./ui";
 import { MediaPreview } from "./ContributionDemo";
@@ -11,6 +12,7 @@ import type { Contribution, Raw, Vote } from "./types";
 import { isTestContribution } from "./testSessions";
 import { useBlurValidation } from "../auth/useBlurValidation";
 import { errorMessage } from "../../api/client";
+import { displayLabel } from "../../lib/display";
 
 const reviewLabels: Record<string, string> = { RAW: "Chờ duyệt", REVIEW: "Đang duyệt", VERIFIED: "Đạt", HOLD: "Cần bổ sung", REJECT: "Không đạt" };
 
@@ -58,14 +60,14 @@ function ReviewInner() {
       !c.duplicateOf &&
       (state.votes.some((v) => v.contributionId === c.id && v.reviewer === actor.id) === done) &&
       c.owner !== actor.id &&
-      (["admin", "reviewer"].includes(actor.role) || c.raw.region === actor.region) &&
+      (["admin", "reviewer"].includes(actor.role) || (c.curated ?? c.raw).region === actor.region) &&
       (done || !!status || ["RAW", "REVIEW", "HOLD"].includes(c.status)),
   );
-  const items = available.filter(c => (!region || c.raw.region === region) && (!status || c.status === status));
+  const items = available.filter(c => (!region || (c.curated ?? c.raw).region === region) && (!status || c.status === status));
   const pages = Math.max(1, Math.ceil(items.length / 10));
   const currentPage = Math.min(page, pages);
   const visibleItems = items.slice((currentPage - 1) * 10, currentPage * 10);
-  const item = items.find((c) => c.id === selected);
+  const item = state.contributions.find((c) => c.id === selected);
   const feedback = state.feedback.filter(f => f.state === "open" && (["admin", "reviewer"].includes(actor.role) || items.some(c => c.id === f.entity)));
   const filtered = !!region || !!status;
   return (
@@ -84,7 +86,7 @@ function ReviewInner() {
             }}
           >
             <option value="">Tất cả vùng</option>
-            {[...new Set([...state.regions, ...state.contributions.map(c => c.raw.region)])].filter(Boolean).map((v) => (
+            {[...new Set([...state.regions, ...state.contributions.map(c => (c.curated ?? c.raw).region)])].filter(Boolean).map((v) => (
               <option key={v}>{v}</option>
             ))}
           </select>
@@ -98,7 +100,7 @@ function ReviewInner() {
               setSelected("");
             }}
           >
-            <option value="">{done || ["admin", "reviewer"].includes(actor.role) ? "Tất cả trạng thái" : "Chờ tôi đánh giá"}</option>
+            <option value="">{done ? "Tất cả trạng thái" : "Chờ tôi đánh giá"}</option>
             {["RAW", "REVIEW", "VERIFIED", "HOLD", "REJECT"].map((v) => (
               <option key={v} value={v}>{reviewLabels[v]}</option>
             ))}
@@ -113,14 +115,15 @@ function ReviewInner() {
             <button
               type="button"
               aria-pressed={selected === c.id}
-              aria-label={`${c.raw.text || c.raw.response} · ${c.raw.region || "Chưa ghi vùng"} · ${reviewLabels[c.status]}`}
+              aria-label={`${(c.curated ?? c.raw).text || c.raw.response} · ${(c.curated ?? c.raw).region || "Chưa ghi vùng"} · ${reviewLabels[c.status]} · Phiên bản ${c.reviewRevision ?? 1}`}
               className="demo-queue-button"
               key={c.id}
               onClick={() => { setSelected(c.id); setNotice(""); }}
             >
-              <strong>{c.raw.text || c.raw.response}</strong>
+              <strong>{(c.curated ?? c.raw).text || c.raw.response}</strong>
+              <small>Phiên bản {c.reviewRevision ?? 1}</small>
               <span>
-                {c.raw.region || "Chưa ghi vùng"}
+                {(c.curated ?? c.raw).region || "Chưa ghi vùng"}
               </span>
               <span className={`demo-status status-${c.status.toLowerCase()}`}>{reviewLabels[c.status]}</span>
               {c.status === "HOLD" && !!c.qualityReasons?.length && <span>Ghi chú kiểm tra ban đầu: {c.qualityReasons.map(reason => qualityReasonLabels[reason] ?? "Cần kiểm tra chất lượng nội dung.").join(" ")}</span>}
@@ -133,7 +136,7 @@ function ReviewInner() {
           )}
         </Panel>
         <div ref={reader} className="review-reader" tabIndex={-1} aria-label="Nội dung mẫu">{item ? (
-          <ReviewItem key={`${item.id}.${state.actor}`} item={item} onReviewed={() => { setSelected(""); setNotice("Đã gửi."); }} />
+          <ReviewSnapshot key={`${item.id}.${state.actor}`} item={item} onCurated={(pending) => { setNotice(pending ? "Đã lưu bản mới. Cần hai người duyệt lại." : "Đã lưu chỉnh lý."); if (pending) setParams({}); }} onReviewed={() => { setSelected(""); setNotice("Đã gửi."); }} />
         ) : (
           <Panel title={items.length ? "Chọn mẫu" : "Nội dung"}>
             <div className="review-reader-empty"><i className="bi bi-file-earmark-text" aria-hidden="true" /><p>{items.length ? "Chọn một mẫu để bắt đầu." : "Chưa có mẫu."}</p></div>
@@ -147,7 +150,7 @@ function ReviewInner() {
         <p>Mỗi đóng góp cần hai người đánh giá độc lập. Bạn sẽ thấy đánh giá của người khác sau khi gửi đánh giá của mình. Khi hai người không thống nhất, Reviewer khác sẽ quyết định.</p>
         <p>Nội dung gốc luôn được giữ nguyên. Bản chỉnh lý chỉ được lưu sau khi đóng góp đã được duyệt đạt.</p>
       </div></details>
-      {live && items.length > 0 && !done && <BulkReviewControls key={`${state.actor}.${region}.${status}.${currentPage}`} items={visibleItems.filter(c=>/^c:\d+$/.test(c.id)).map(c=>({id:Number(c.id.slice(2)),label:c.raw.text||c.raw.response}))} admin={["admin", "reviewer"].includes(actor.role)} reload={refresh}/>}
+      {live && items.length > 0 && !done && <BulkReviewControls key={`${state.actor}.${region}.${status}.${currentPage}`} items={visibleItems.filter(c=>/^c:\d+$/.test(c.id)).map(c=>({id:Number(c.id.slice(2)),label:(c.curated ?? c.raw).text||c.raw.response}))} admin={["admin", "reviewer"].includes(actor.role)} reload={refresh}/>}
       {feedback.length > 0 && <Panel title={`Phản hồi cần xử lý (${feedback.length})`}>
         {feedback
           .map((f) => (
@@ -175,24 +178,43 @@ function ResolveFeedback({ id }: { id: string }) {
 }
 function OriginalDetails({ raw }: { raw: Raw }) {
   const fields = [
+    ["kind", "Loại nội dung"],
     ["meaning", "Nghĩa"],
     ["standard", "Cách nói phổ thông"],
     ["context", "Ví dụ / ngữ cảnh"],
     ["region", "Vùng sử dụng"],
     ["topic", "Chủ đề"],
+    ["partOfSpeech", "Từ loại"],
+    ["keywords", "Từ khóa"],
     ["variants", "Biến thể"],
     ["evidence", "Chứng cứ / nguồn"],
   ] as const;
   return <dl className="demo-definition">
     {fields.filter(([key]) => raw[key]?.trim() && !(key === "standard" && raw[key].trim() === raw.text.trim())).map(([key, label]) => (
-      <div key={key} className={["context", "evidence", "variants"].includes(key) ? "review-definition-wide" : undefined}><dt>{label}</dt><dd>{raw[key]}</dd></div>
+      <div key={key} className={["context", "evidence", "variants"].includes(key) ? "review-definition-wide" : undefined}><dt>{label}</dt><dd>{key === "kind" ? displayLabel(raw[key]) : raw[key]}</dd></div>
     ))}
   </dl>;
 }
-function ReviewItem({ item: c, onReviewed }: { item: Contribution; onReviewed: () => void }) {
+// Keep inputs and their version together until the reviewer explicitly reloads.
+function ReviewSnapshot({ item, onReviewed, onCurated }: { item: Contribution; onReviewed: () => void; onCurated: (pending: boolean) => void }) {
+  const [snapshot, setSnapshot] = useState(() => structuredClone(item));
+  const stale = reviewDigest(snapshot) !== reviewDigest(item);
+  return <>
+    {stale && <div role="status" className="demo-note"><p>Mẫu đã được sửa. Nội dung bạn đang nhập vẫn được giữ.</p><button type="button" className="btn btn-outline-primary" onClick={() => {
+      if (window.confirm("Tải bản mới và bỏ phần đang nhập?")) setSnapshot(structuredClone(item));
+    }}>Xem bản mới</button></div>}
+    <ReviewItem key={reviewDigest(snapshot)} item={snapshot} stale={stale} canProcessLatest={item.consent.collect === true && !item.withdrawn} onReviewed={onReviewed} onCurated={next => {
+      setSnapshot(structuredClone(next));
+      onCurated(next.status === "RAW");
+    }} />
+  </>;
+}
+function ReviewItem({ item: c, stale, canProcessLatest, onReviewed, onCurated }: { item: Contribution; stale: boolean; canProcessLatest: boolean; onReviewed: () => void; onCurated: (next: Contribution) => void }) {
   const { state, run } = useDemo();
   const actor = state.people.find((p) => p.id === state.actor)!;
-  const key = `review.${actor.id}.${c.id}`;
+  const key = reviewDraftKey(actor.id, c);
+  const current = c.curated ?? c.raw;
+  const expectedDigest = c.reviewDigest ?? reviewDigest(c);
   const draft = state.drafts?.find((d) => d.key === key);
   const [note, setNote] = useState(draft?.raw.text ?? "");
   const [verdict, setVerdict] = useState<Vote["verdict"]>(() =>
@@ -219,16 +241,18 @@ function ReviewItem({ item: c, onReviewed }: { item: Contribution; onReviewed: (
   );
   const [sense, setSense] = useState(c.senseId ?? "");
   const [curateBusy, setCurateBusy] = useState(false);
-  const [curateSaved, setCurateSaved] = useState(false);
   const [curateError, setCurateError] = useState("");
+  const [draftError, setDraftError] = useState("");
   const curateLabels = { text: "cách nói địa phương", meaning: "nghĩa", standard: "cách nói phổ thông", context: "ví dụ hoặc ngữ cảnh" };
   const curateValidation = useBlurValidation(Object.fromEntries(Object.entries(curateLabels).map(([key, label]) => [key, () => curated[key as keyof typeof curateLabels].trim() ? "" : `Nhập ${label}.`])));
   const qa = c.qaAudio;
   const [sending, setSending] = useState(false);
-  const votes = state.votes.filter((v) => v.contributionId === c.id);
+  const [openedVotes] = useState(() => state.votes.filter(v => v.contributionId === c.id));
+  const votes = stale ? openedVotes : state.votes.filter((v) => v.contributionId === c.id);
   const voted = votes.some((v) => v.reviewer === actor.id);
   const canSee = voted || (["admin", "reviewer"].includes(actor.role) && votes.length >= 2);
-  const canAct = ["RAW", "REVIEW"].includes(c.status) && !voted && votes.length < 2 && c.owner !== actor.id;
+  const canProcess = canProcessLatest && c.consent.collect === true && !c.withdrawn;
+  const canAct = canProcess && ["RAW", "REVIEW"].includes(c.status) && !voted && votes.length < 2 && c.owner !== actor.id;
   function saveDraft(n: string, v: Vote["verdict"], cs: boolean[]) {
     void run({
       type: "draft",
@@ -242,14 +266,29 @@ function ReviewItem({ item: c, onReviewed }: { item: Contribution; onReviewed: (
       },
       consent: consentDefault(),
       parent: null,
-    }).catch(() => {});
+    }).then(() => setDraftError("")).catch(() => setDraftError("Chưa lưu được nháp đánh giá. Giữ trang này và thử lại."));
   }
   return (
     <Panel title="Nội dung">
+      {draftError && <p role="alert" className="demo-error">{draftError}</p>}
       <span className={`demo-status status-${c.status.toLowerCase()}`}>{reviewLabels[c.status]}</span>
       {c.status === "HOLD" && !!c.qualityReasons?.length && <p>Ghi chú kiểm tra ban đầu: {c.qualityReasons.map(reason => qualityReasonLabels[reason] ?? "Cần kiểm tra chất lượng nội dung.").join(" ")}</p>}
-      <h3 className="review-original">{c.raw.text || c.raw.response}</h3>
-      <OriginalDetails raw={c.raw} />
+      <p><strong>Phiên bản {c.reviewRevision ?? 1} · Nội dung đang được đánh giá</strong></p>
+      <h3 className="review-original">{current.text || current.response}</h3>
+      <OriginalDetails raw={current} />
+      {c.senseId && <p>Mã nghĩa: {c.senseId}</p>}
+      <details><summary>Bản gốc người góp gửi</summary><h3>{c.raw.text || c.raw.response}</h3><OriginalDetails raw={c.raw} /></details>
+      <details><summary>Lịch sử phiên bản ({c.reviewHistory?.length ?? 0})</summary>
+        {(c.reviewHistory ?? []).map(h => <section key={h.revision} aria-label={`Phiên bản lưu trữ ${h.revision}`}>
+          <h3>Phiên bản {h.revision} · {reviewLabels[h.status]} · {h.votes.length} đánh giá đã lưu trữ</h3>
+          <h4>{h.content.text}</h4><OriginalDetails raw={h.content} />
+          {h.senseId && <p>Mã nghĩa: {h.senseId}</p>}
+          <p>Lưu trữ: {new Date(h.archivedAt).toLocaleString("vi-VN")}</p>
+          {h.votes.map((v, i) => <p key={v.id}>Đánh giá lưu trữ {i + 1}: {reviewLabels[v.verdict]} · {v.note}</p>)}
+        </section>)}
+        {!c.reviewHistory?.length && <p>Chưa có phiên bản lưu trữ.</p>}
+      </details>
+      {!canProcess && <p role="status">Mẫu đã dừng tiếp nhận. Chỉ xem lịch sử, không thể duyệt hoặc chỉnh lý.</p>}
       {c.raw.mediaIds.map((id) => (
         <MediaPreview key={id} id={id} />
       ))}
@@ -280,7 +319,7 @@ function ReviewItem({ item: c, onReviewed }: { item: Contribution; onReviewed: (
             if (sending) return;
             setSending(true);
             try {
-              await run({ type: "vote", id: c.id, verdict, checks, note });
+              await run({ type: "vote", id: c.id, expectedDigest, verdict, checks, note });
               await run({ type: "clearDraft", key });
               onReviewed();
             } catch {
@@ -351,7 +390,7 @@ function ReviewItem({ item: c, onReviewed }: { item: Contribution; onReviewed: (
           Đóng góp đang được giữ để kiểm tra hoặc chờ người góp bổ sung. Bạn chưa thể gửi đánh giá ở trạng thái này. Người kiểm duyệt có thể đưa lại vào hàng chờ sau khi kiểm tra.
         </p>
       )}
-      {["admin", "reviewer"].includes(actor.role) &&
+      {canProcess && ["admin", "reviewer"].includes(actor.role) &&
         c.status === "REVIEW" &&
         votes.length >= 2 &&
         new Set(votes.map((v) => v.verdict)).size > 1 && (
@@ -373,7 +412,7 @@ function ReviewItem({ item: c, onReviewed }: { item: Contribution; onReviewed: (
               />
             </Field>
             <Action
-              onClick={() => run({ type: "decide", id: c.id, verdict, note })}
+              onClick={() => run({ type: "decide", id: c.id, expectedDigest, verdict, note })}
             >
               Lưu phân xử độc lập
             </Action>
@@ -393,15 +432,15 @@ function ReviewItem({ item: c, onReviewed }: { item: Contribution; onReviewed: (
           Gửi yêu cầu bổ sung
         </Action>
       </div></details>}
-      {c.status === "VERIFIED" && (
+      {canProcess && c.status === "VERIFIED" && (
         <div>
           <h3>Chỉnh lý nội dung đã duyệt</h3>
-          <p className="review-hint">Lưu một bản đã chỉnh lý để sử dụng trong bộ dữ liệu. Nội dung người góp gửi vẫn được giữ nguyên.</p>
+          <p className="review-hint">Thay đổi nội dung sẽ mở phiên bản mới và cần hai người duyệt lại. Nội dung người góp gửi luôn được giữ nguyên.</p>
           <form noValidate aria-busy={curateBusy} onSubmit={async e => {
             e.preventDefault();
             if (!curateValidation.validate(e)) return;
-            setCurateBusy(true); setCurateSaved(false); setCurateError("");
-            try { await run({ type: "curate", id: c.id, raw: curated, senseId: sense || c.id, qaAudio: qa }); setCurateSaved(true); }
+            setCurateBusy(true); setCurateError("");
+            try { const next = await run({ type: "curate", id: c.id, expectedDigest, raw: curated, senseId: sense, qaAudio: qa }); const saved = next.contributions.find(item => item.id === c.id); if (saved) onCurated(saved); }
             catch (error) { setCurateError(errorMessage(error)); }
             finally { setCurateBusy(false); }
           }}><fieldset disabled={curateBusy}>
@@ -418,20 +457,19 @@ function ReviewItem({ item: c, onReviewed }: { item: Contribution; onReviewed: (
                   onBlur={() => { if (k in curateLabels) curateValidation.blur(k); }}
                   aria-invalid={!!curateValidation.errors[k]} aria-describedby={curateValidation.errors[k] ? `curate-${k}-error` : undefined}
                   onChange={(e) =>
-                    { setCurated({ ...curated, [k]: e.target.value }); setCurateSaved(false); }
+                    { setCurated({ ...curated, [k]: e.target.value }); }
                   }
                 />
                 {curateValidation.errors[k] && <span className="bz-field-error" id={`curate-${k}-error`} role="alert">{curateValidation.errors[k]}</span>}
               </Field>
             ))}
             <Field label="Mã nghĩa: dùng chung để gộp biến thể, dùng riêng để tách nghĩa">
-              <input value={sense} onChange={(e) => { setSense(e.target.value); setCurateSaved(false); }} />
+              <input value={sense} onChange={(e) => { setSense(e.target.value); }} />
             </Field>
 
           </div>
           <button className="btn btn-primary" disabled={curateBusy}>{curateBusy ? "Đang lưu…" : "Lưu"}</button>
           </fieldset></form>
-          {curateSaved && <p className="demo-success" role="status">Đã lưu chỉnh lý.</p>}
           {curateError && <p className="demo-error" role="alert">{curateError}</p>}
           <ul>
             {exclusionReasons(state, c).map((r) => (

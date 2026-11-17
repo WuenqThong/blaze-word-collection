@@ -3,7 +3,8 @@ from typing import Optional
 import hashlib
 import hmac
 
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError
 from passlib.context import CryptContext
 
 from .config import get_settings
@@ -40,5 +41,5 @@ def create_access_token(user_id: int, role: str, password_hash: str) -> str:
 def decode_token(token: str) -> Optional[dict]:
     try:
         return jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_alg])
-    except JWTError:
+    except InvalidTokenError:
         return None

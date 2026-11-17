@@ -19,6 +19,9 @@ from app.models.dialect import DialectContributionMeta as M, DialectSourceRights
 from app.routers.deps import get_current_user
 from app.services.contribution_quality import QUALITY_POLICY_VERSION, quality_reasons
 
+from app.services.collection_consent import consent_of, contribution_write, locked_contribution, lock_contributions, require_collection_consent
+from app.services.review_binding import binding, bound_votes, history, require_digest
+
 router = APIRouter(prefix="/dialect", tags=["dialect"])
 CONSENT_VERSION = "dialect-2026-11-v1"
 # Consent texts shown by the /demo screens; each version maps to a text the participant actually saw.
@@ -35,9 +38,10 @@ def active(request: Request, user: User = Depends(get_current_user)):
     return user
 
 
-def admin(user: User = Depends(active)):
-    if user.role not in ('admin', 'reviewer'):
-        raise HTTPException(403, "Chỉ quản trị viên được thực hiện thao tác này")
+def admin(user: User = Depends(active), db: Session = Depends(get_db)):
+    from app.services.staff_access import can_operate
+    if not can_operate(db, user):
+        raise HTTPException(403, "Cần Reviewer được cấp quyền vận hành.")
     return user
 
 
@@ -74,21 +78,14 @@ def meta_of(db, cid, create=False):
     return row
 
 
-def consent_of(item, meta=None):
-    """Effective consent: a later override in meta wins over the consent captured in RAW."""
-    if meta is not None and meta.consent:
-        return meta.consent
-    raw = item.raw
-    return {"collect": bool(raw.get("consent_collect")), "train": bool(raw.get("consent_train")), "public": bool(raw.get("consent_public")),
-            "audio": bool(raw.get("consent_audio")), "version": raw.get("consent_version", "")}
-
-
 def pack(item, db, user, adjudication=False):
-    votes = db.query(V).filter_by(contribution_id=item.id).all()
+    votes = bound_votes(db, item)
     own_vote = next((v for v in votes if v.reviewer_id == user.id), None)
     source = db.get(S, item.source_id)
     meta = db.get(M, item.id)
     return {"id": item.id, "owner_id": item.owner_id, "parent_id": item.parent_id, "source_id": item.source_id,
+            **binding(db, item), "review_history": history(db, item),
+            "review_required": item.status != 'VERIFIED' or len({v.reviewer_id for v in votes}) < 2,
             "raw": item.raw, "status": item.status, "withdrawn_at": item.withdrawn_at, "created_at": item.created_at,
             "rights_confirmed": source.rights_confirmed, "rights_note": source.rights_note,
             "vote_count": len(votes), "has_voted": own_vote is not None,
@@ -211,7 +208,8 @@ def create(body: ContributionInput, db: Session = Depends(get_db), user: User = 
 
 
 def save_contribution(body: ContributionInput, db: Session, user, *, commit=True, authoritative_game=False, imported_source=None):
-    if imported_source is not None and (user.role not in ('admin', 'reviewer') or body.method != 'import' or imported_source.owner_id != user.id):
+    from app.services.staff_access import can_operate
+    if imported_source is not None and (not can_operate(db, user) or body.method != 'import' or imported_source.owner_id != user.id):
         raise HTTPException(403, 'Nguồn nhập phải thuộc quản trị viên đang tiếp nhận')
     if body.media_ids or body.consent_audio:
         raise HTTPException(422, 'Pilot chỉ thu văn bản; chưa tiếp nhận tệp hoặc quyền sử dụng âm thanh')
@@ -233,7 +231,9 @@ def save_contribution(body: ContributionInput, db: Session, user, *, commit=True
         if existing.request_hash != request_hash:
             raise HTTPException(409, "Mã gửi đã được dùng cho nội dung khác. Hãy bắt đầu lượt gửi mới.")
         return pack(existing, db, user)
-    if not body.consent_train and not (user.role in ('admin', 'reviewer') and body.method == "import"):
+    if body.method == 'import' and not can_operate(db, user):
+        raise HTTPException(403, 'Cần quyền vận hành để nhập dữ liệu.')
+    if not body.consent_train and not (can_operate(db, user) and body.method == "import"):
         raise HTTPException(422, "Cần đồng ý sử dụng dữ liệu để huấn luyện trước khi gửi đóng góp mới.")
     if body.session_ref:
         from app.models.game import GameSession
@@ -305,14 +305,15 @@ def detail(cid: int, db: Session = Depends(get_db), user: User = Depends(active)
 
 @router.post("/contributions/{cid}/withdraw")
 def withdraw(cid: int, db: Session = Depends(get_db), user: User = Depends(active)):
-    item = find(db, cid)
-    if item.owner_id != user.id:
-        raise HTTPException(403, "Chỉ người đóng góp được rút mẫu của mình")
-    if not item.withdrawn_at:
-        item.withdrawn_at = utcnow()
-        event(db, item, user, "WITHDRAWN", "Đã rút quyền sử dụng; ngừng xuất trong các bản phát hành được hệ thống kiểm soát")
-        db.commit()
-    return pack(item, db, user)
+    with contribution_write(db):
+        item = locked_contribution(db, cid)
+        if item.owner_id != user.id:
+            raise HTTPException(403, "Chỉ người đóng góp được rút mẫu của mình")
+        if not item.withdrawn_at:
+            item.withdrawn_at = utcnow()
+            event(db, item, user, "WITHDRAWN", "Đã rút quyền sử dụng; ngừng xuất trong các bản phát hành được hệ thống kiểm soát")
+            db.commit()
+        return pack(item, db, user)
 
 
 @router.get("/duplicates")
@@ -349,6 +350,7 @@ def queue(view: str = "pending", db: Session = Depends(get_db), user: User = Dep
 
 
 class VoteInput(BaseModel):
+    expected_digest: str | None = None
     verdict: Literal["VERIFIED", "HOLD", "REJECT"]
     meaning_ok: bool
     region_ok: bool
@@ -359,45 +361,46 @@ class VoteInput(BaseModel):
 
 @router.post("/reviews/{cid}/votes")
 def vote(cid: int, body: VoteInput, db: Session = Depends(get_db), user: User = Depends(reviewer)):
-    if db.get_bind().dialect.name == 'sqlite':
-        db.execute(text('BEGIN IMMEDIATE'))
-    item = find(db, cid)
-    if db.get_bind().dialect.name != 'sqlite':
-        item = db.query(C).filter_by(id=cid).with_for_update().one()
-    from app.routers.dialect_review_ops import enforce_region
-    enforce_region(db, user, item)
-    if item.owner_id == user.id:
-        raise HTTPException(403, "Không được tự duyệt mẫu của mình")
-    if item.withdrawn_at or item.status not in ("RAW", "REVIEW"):
-        raise HTTPException(409, "Mẫu đã rút hoặc đã có quyết định; hãy tải lại")
-    if db.query(V).filter_by(contribution_id=cid).count() >= 2:
-        raise HTTPException(409, 'Đã đủ hai phiếu; cần phân xử nếu bất đồng')
-    meta = db.get(M, cid)
-    if meta and meta.duplicate_of:
-        raise HTTPException(409, "Mẫu trùng không thuộc hàng chờ duyệt mới")
-    participant = db.get(DP, user.id)
-    if user.role not in ('admin', 'reviewer') and participant and participant.review_region and participant.review_region != item.raw.get("region"):
-        raise HTTPException(403, "Mẫu nằm ngoài vùng chuyên môn được giao")
-    rubric = body.model_dump(exclude={"verdict", "note"})
-    if body.verdict == "VERIFIED" and not all(rubric.values()):
-        raise HTTPException(422, "Chỉ xác minh khi tất cả tiêu chí đạt")
-    db.add(V(contribution_id=cid, reviewer_id=user.id, verdict=body.verdict, rubric=rubric, note=body.note))
-    try:
-        db.flush()
-        votes = db.query(V).filter_by(contribution_id=cid).all()
-        decisions = {v.verdict for v in votes}
-        item.status = next(iter(decisions)) if len(votes) >= 2 and len(decisions) == 1 else "REVIEW"
-        event(db, item, user, "REVIEWED", "Đã tiếp nhận một phiếu độc lập")
-        if item.status != "REVIEW":
-            event(db, item, user, item.status, "Hai hoặc nhiều phiếu độc lập đồng thuận. " + " / ".join(v.note for v in votes))
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(409, "Bạn đã gửi phiếu cho mẫu này")
-    return pack(item, db, user)
+    with contribution_write(db):
+        item = locked_contribution(db, cid)
+        require_collection_consent(db, item)
+        require_digest(db, item, body.expected_digest)
+        from app.routers.dialect_review_ops import enforce_region
+        enforce_region(db, user, item)
+        if item.owner_id == user.id:
+            raise HTTPException(403, "Không được tự duyệt mẫu của mình")
+        if item.withdrawn_at or item.status not in ("RAW", "REVIEW"):
+            raise HTTPException(409, "Mẫu đã rút hoặc đã có quyết định; hãy tải lại")
+        if db.query(V).filter_by(contribution_id=cid).count() >= 2:
+            raise HTTPException(409, 'Đã đủ hai phiếu; cần phân xử nếu bất đồng')
+        meta = db.get(M, cid)
+        if meta and meta.duplicate_of:
+            raise HTTPException(409, "Mẫu trùng không thuộc hàng chờ duyệt mới")
+        participant = db.get(DP, user.id)
+        if user.role not in ('admin', 'reviewer') and participant and participant.review_region and participant.review_region != item.raw.get("region"):
+            raise HTTPException(403, "Mẫu nằm ngoài vùng chuyên môn được giao")
+        rubric = body.model_dump(exclude={"verdict", "note", "expected_digest"})
+        if body.verdict == "VERIFIED" and not all(rubric.values()):
+            raise HTTPException(422, "Chỉ xác minh khi tất cả tiêu chí đạt")
+        rubric.update(binding(db, item))
+        db.add(V(contribution_id=cid, reviewer_id=user.id, verdict=body.verdict, rubric=rubric, note=body.note))
+        try:
+            db.flush()
+            votes = bound_votes(db, item)
+            decisions = {v.verdict for v in votes}
+            item.status = next(iter(decisions)) if len(votes) >= 2 and len(decisions) == 1 else "REVIEW"
+            event(db, item, user, "REVIEWED", "Đã tiếp nhận một phiếu độc lập")
+            if item.status != "REVIEW":
+                event(db, item, user, item.status, "Hai hoặc nhiều phiếu độc lập đồng thuận. " + " / ".join(v.note for v in votes))
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(409, "Bạn đã gửi phiếu cho mẫu này")
+        return pack(item, db, user)
 
 
 class DecisionInput(BaseModel):
+    expected_digest: str | None = None
     verdict: Literal["VERIFIED", "HOLD", "REJECT"]
     note: str = Field(min_length=1, max_length=5000)
 
@@ -410,17 +413,20 @@ class DecisionInput(BaseModel):
 
 
 @router.post("/reviews/{cid}/finalize")
-def finalize(cid: int, body: DecisionInput, db: Session = Depends(get_db), user: User = Depends(admin)):
-    item = find(db, cid)
-    votes = db.query(V).filter_by(contribution_id=cid).all()
-    if item.owner_id == user.id or any(v.reviewer_id == user.id for v in votes):
-        raise HTTPException(403, "Điều phối viên phải độc lập với người góp và người đã bỏ phiếu")
-    if item.withdrawn_at or item.status != "REVIEW" or len(votes) < 2:
-        raise HTTPException(409, "Mẫu cần ít nhất hai phiếu và đang chờ điều phối")
-    item.status = body.verdict
-    event(db, item, user, body.verdict, body.note)
-    db.commit()
-    return pack(item, db, user)
+def finalize(cid: int, body: DecisionInput, db: Session = Depends(get_db), user: User = Depends(reviewer)):
+    with contribution_write(db):
+        item = locked_contribution(db, cid)
+        require_collection_consent(db, item)
+        require_digest(db, item, body.expected_digest)
+        votes = bound_votes(db, item)
+        if item.owner_id == user.id or any(v.reviewer_id == user.id for v in votes):
+            raise HTTPException(403, "Điều phối viên phải độc lập với người góp và người đã bỏ phiếu")
+        if item.withdrawn_at or item.status != "REVIEW" or len(votes) < 2:
+            raise HTTPException(409, "Mẫu cần ít nhất hai phiếu và đang chờ điều phối")
+        item.status = body.verdict
+        event(db, item, user, body.verdict, body.note)
+        db.commit()
+        return pack(item, db, user)
 
 
 @router.get("/sources")
@@ -473,7 +479,7 @@ def exclusion_reasons(db, c, superseded):
         reasons.append("Đã rút mẫu")
     if c.status != "VERIFIED":
         reasons.append("Chưa xác minh nội dung")
-    if db.query(V.reviewer_id).filter(V.contribution_id == c.id, V.reviewer_id != c.owner_id).distinct().count() < 2:
+    if len({v.reviewer_id for v in bound_votes(db, c)}) < 2:
         reasons.append("Chưa đủ hai phiếu")
     if not db.get(S, c.source_id).rights_confirmed:
         reasons.append("Chưa xác nhận quyền nguồn")
@@ -555,7 +561,11 @@ def reviewer_role(uid: int, body: ReviewerRoleInput, db: Session = Depends(get_d
         raise HTTPException(404, "Không tìm thấy tài khoản")
     if target.role in ('admin', 'reviewer') and body.role == 'annotator' and db.query(User).filter(User.role.in_(('admin', 'reviewer')), User.account_status == 'active').count() <= 1:
         raise HTTPException(409, "Cần giữ ít nhất một Reviewer")
-    target.role = body.role
+    if body.role == 'annotator':
+        from app.services.staff_access import preserve_operator
+        preserve_operator(db, target)
+    from app.services.staff_access import change_role
+    change_role(db, target, body.role)
     db.commit()
     return {"id": target.id, "role": target.role}
 
@@ -639,6 +649,18 @@ def curated_records(db, ids, splits):
 
 @router.post("/releases", status_code=201)
 def release(body: ReleaseInput | None = None, db: Session = Depends(get_db), user: User = Depends(admin)):
+    with contribution_write(db):
+        lock_release_content(db)
+        return save_release(body, db, user)
+
+
+def lock_release_content(db):
+    # Grouping uses the entire live universe, not just the selected record IDs.
+    lock_contributions(db, [cid for (cid,) in db.query(C.id).order_by(C.id)])
+    db.query(M).populate_existing().all()
+
+
+def save_release(body, db, user):
     if body and body.ids == []:
         raise HTTPException(409, "Chưa chọn mẫu để xuất")
     plan = release_plan(db, body.ids if body else None, body.splits if body else None)
@@ -656,6 +678,12 @@ def release(body: ReleaseInput | None = None, db: Session = Depends(get_db), use
 
 @router.get("/releases/{rid}")
 def download(rid: int, db: Session = Depends(get_db), user: User = Depends(admin)):
+    with contribution_write(db):
+        lock_release_content(db)
+        return release_download(rid, db, user)
+
+
+def release_download(rid, db, user):
     row = db.get(R, rid)
     if not row:
         raise HTTPException(404, "Không tìm thấy bản phát hành")

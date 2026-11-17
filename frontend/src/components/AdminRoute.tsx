@@ -11,6 +11,6 @@ export function AdminRoute() {
     );
   }
   if (!user) return <Navigate to="/login" replace />;
-  if (!["admin", "reviewer"].includes(user.role)) return <ErrorPage code={403} />;
+  if (!user.operations && user.role !== "admin") return <ErrorPage code={403} />;
   return <Outlet />;
 }

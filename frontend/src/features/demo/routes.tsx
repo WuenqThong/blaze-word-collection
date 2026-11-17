@@ -10,7 +10,6 @@ export const demoRoute = {
   ),
   lazy: async () => ({ Component: (await import("./DemoLayout")).DemoRoot }),
   children: [
-    { path: "internal", element: <section className="demo-panel"><h1>Thử nghiệm nội bộ</h1><p>Chọn vai trò ở công cụ phía trên để thử phân luồng. Đây là mô phỏng trên trình duyệt, không phải đăng nhập hoặc phân quyền máy chủ.</p><a href="/demo/admin/dashboard">Mở quản trị</a><br /><a href="/demo/admin/review">Mở hàng chờ người duyệt</a></section> },
     {
       index: true,
       lazy: async () => ({ Component: (await import("./HomeDemo")).HomeDemo }),

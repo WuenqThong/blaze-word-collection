@@ -1,4 +1,4 @@
-/* Blaze Collection — implementation of /DESIGN.md. Loaded after legacy feature styles. */
+/* Blaze Collection — implementation of /docs/DESIGN.md. Loaded after legacy feature styles. */
 :root {
   --app-font: "Inter", system-ui, sans-serif;
   --accent: #a15c00;

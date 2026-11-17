@@ -1,8 +1,9 @@
 // Bridges the demo store to the real /api/dialect backend for a signed-in account.
 //
 // Server-owned collections: contributions, votes, sources created by contributors,
-// releases, people, credits and feedback. The game (questions, exams, sessions),
-// campaigns, tasks, media blobs and AI jobs stay in IndexedDB.
+// releases, people, credits and feedback. Game catalogs, session snapshots and
+// commands are synchronized separately by gameServer.ts. IndexedDB holds the
+// local cache, pending writes and browser-only workspace data.
 //
 // Contributions are written locally first (the reducer validates and the UI stays
 // responsive), then pushed with the local id as idempotency key. Local ids are
@@ -27,7 +28,13 @@ interface ServerRaw {
   response?: Raw["response"]; method?: string; topic?: string; part_of_speech?: string; variants?: string;
   keywords?: string; family?: string; confidence?: string; media_ids?: string[];
 }
+interface ServerReviewRevision {
+  review_revision: number; review_digest: string;
+  content: { raw: ServerRaw; curated: Partial<Raw> | null; fields: Partial<Raw>; sense_id: string; qa_audio: string };
+  status: Verdict; votes: ServerContribution["votes"]; actor_id: number; created_at: string;
+}
 interface ServerContribution {
+  review_digest?: string; review_revision?: number; review_history?: ServerReviewRevision[];
   id: number; owner_id: number; parent_id: number | null; source_id: number; raw: ServerRaw; status: Verdict;
   withdrawn_at: string | null; created_at: string; vote_count: number; has_voted: boolean;
   votes: { id: number; reviewer_id: number; verdict: Vote["verdict"]; rubric: Record<string, boolean>; note: string; created_at: string }[];
@@ -39,6 +46,7 @@ interface ServerContribution {
   meta: { session_ref: string | null; duplicate_of: number | null; curated: Partial<Raw> | null; sense_id: string; qa_audio: string };
 }
 interface ServerPerson {
+  operations?: boolean;
   id: number; full_name: string; role: "admin" | "reviewer" | "annotator"; account_status: string;
   region: string; verified: boolean; risk: "clear" | "hold"; review_region: string; appeal: string;
 }
@@ -91,6 +99,15 @@ function toRaw(r: ServerRaw): Raw {
 function toContribution(x: ServerContribution): Contribution {
   const raw = toRaw(x.raw);
   return {
+    reviewDigest: x.review_digest, reviewRevision: x.review_revision ?? 1,
+    clientRef: x.client_ref ?? undefined,
+    reviewHistory: (x.review_history ?? []).map(h => ({
+      revision: h.review_revision, digest: h.review_digest,
+      content: { ...toRaw(h.content.raw), ...h.content.fields }, senseId: h.content.sense_id || null,
+      qaAudio: h.content.qa_audio, status: h.status, archivedAt: iso(h.created_at),
+      votes: h.votes.map(v => ({ id: `v:archived:${h.review_revision}:${v.id}`, contributionId: contributionId(x.id),
+        reviewer: personId(v.reviewer_id), verdict: v.verdict, checks: RUBRIC.map(k => !!v.rubric[k]), note: v.note, at: iso(v.created_at) })),
+    })),
     qualityReasons: x.quality_reasons ?? [],
     id: contributionId(x.id), owner: personId(x.owner_id), sessionId: x.meta.session_ref, parent: x.parent_id ? contributionId(x.parent_id) : null,
     raw, consent: x.consent, sourceId: sourceId(x.source_id), status: x.status, createdAt: iso(x.created_at), withdrawn: !!x.withdrawn_at,
@@ -115,7 +132,7 @@ function toVotes(x: ServerContribution): Vote[] {
 }
 
 function toPerson(p: ServerPerson): Person {
-  return { id: personId(p.id), name: p.full_name, role: demoRole(p.role), verified: p.verified, region: p.role === "reviewer" ? p.review_region : p.region, risk: p.risk, appeal: p.appeal };
+  return { id: personId(p.id), name: p.full_name, role: demoRole(p.role), operations: p.operations === true, verified: p.verified, region: p.role === "reviewer" ? p.review_region : p.region, risk: p.risk, appeal: p.appeal };
 }
 
 function toSource(s: ServerSource): Source {
@@ -304,7 +321,7 @@ export async function flushReceipts(state: DemoState, accountId: number, signal:
 /** Commands whose effect lives only on the server. `source` only for server sources
  *  (see isServerSource); question-bank sources stay local. */
 export const SERVER_COMMANDS = new Set<Command["type"]>([
-  "consent", "vote", "decide", "curate", "source", "person", "feedback", "resolve", "rewardPolicy", "grant", "revoke", "spend", "release", "appeal", "register", "actor",
+  "consent", "vote", "decide", "curate", "source", "person", "feedback", "resolve", "rewardPolicy", "grant", "revoke", "spend", "release", "appeal", "register",
 ]);
 
 /** Where a command runs for a signed-in account. */
@@ -325,8 +342,6 @@ export async function execute(command: Command, state: DemoState, account: User)
     put: (url: string, body?: unknown) => apiClient.put(url, body, config),
   };
   switch (command.type) {
-    case "actor":
-      throw Error("Đang dùng tài khoản thật. Đăng nhập bằng tài khoản khác để đổi vai trò.");
     case "register":
       throw Error("Đang dùng tài khoản thật. Tạo tài khoản mới ở trang Đăng ký.");
     case "consent": {
@@ -337,14 +352,14 @@ export async function execute(command: Command, state: DemoState, account: User)
     }
     case "vote": {
       const [meaning_ok, region_ok, context_ok, translation_ok] = [0, 1, 2, 3].map((i) => !!command.checks[i]);
-      await client.post(`/dialect/reviews/${serverNumber(command.id, "c")}/votes`, { verdict: command.verdict, meaning_ok, region_ok, context_ok, translation_ok, note: command.note });
+      await client.post(`/dialect/reviews/${serverNumber(command.id, "c")}/votes`, { verdict: command.verdict, meaning_ok, region_ok, context_ok, translation_ok, note: command.note, expected_digest: command.expectedDigest });
       return;
     }
     case "decide":
-      await client.post(`/dialect/reviews/${serverNumber(command.id, "c")}/finalize`, { verdict: command.verdict, note: command.note });
+      await client.post(`/dialect/reviews/${serverNumber(command.id, "c")}/finalize`, { verdict: command.verdict, note: command.note, expected_digest: command.expectedDigest });
       return;
     case "curate":
-      await client.post(`/dialect/reviews/${serverNumber(command.id, "c")}/curate`, { raw: command.raw, sense_id: command.senseId, qa_audio: command.qaAudio });
+      await client.post(`/dialect/reviews/${serverNumber(command.id, "c")}/curate`, { raw: command.raw, sense_id: command.senseId, qa_audio: command.qaAudio, expected_digest: command.expectedDigest });
       return;
     case "source": {
       const s = command.source;
@@ -358,9 +373,11 @@ export async function execute(command: Command, state: DemoState, account: User)
       const p = command.person;
       const before = state.people.find((x) => x.id === p.id);
       const body: Record<string, unknown> = { verified: p.verified, risk: p.risk, review_region: p.region };
+      if (p.operations !== undefined && p.operations !== before?.operations) body.operations = p.operations;
       if (command.expected) {
         const old = command.expected;
         body.expected = { role: old.role === "contributor" ? "annotator" : old.role, verified: old.verified, risk: old.risk, ...(old.role === "reviewer" ? { review_region: old.region } : {}) };
+        if (old.operations !== undefined) (body.expected as Record<string,unknown>).operations = old.operations;
       }
       if (before && before.role !== p.role) {
         const role = ROLE_FOR_SERVER[p.role];

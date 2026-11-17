@@ -43,7 +43,8 @@ def cursor_decode(value, user):
 
 def page_collections(db, user, cursor=None, limit=100):
     staff = user.role in ('admin', 'reviewer')
-    admin = user.role in ('admin', 'reviewer')
+    from app.services.staff_access import can_operate
+    admin = can_operate(db, user)
     contributions = db.query(C) if staff else db.query(C).filter(C.owner_id == user.id)
     source_ids = contributions.with_entities(C.source_id)
     queries = {
@@ -76,13 +77,14 @@ def page_collections(db, user, cursor=None, limit=100):
 
 
 def statistics(db, user):
-    from app.routers.dialect import eligible, curated_ok
+    from app.routers.dialect import eligible
+    from app.services.dataset_release import release_candidates
     admin = user.role in ('admin', 'reviewer')
     receipts = db.query(GR) if admin else db.query(GR).filter(GR.user_id == user.id)
     rows = receipts.all()
     samples = db.query(C) if admin else db.query(C).filter(C.owner_id == user.id)
     contributions = samples.all()
-    allowed = [c for c in eligible(db) if (admin or c.owner_id == user.id) and curated_ok(db, c)]
+    allowed = [c for c in release_candidates(db, eligible(db))[0].values() if admin or c.owner_id == user.id]
     people = db.query(User).all() if admin else [user]
     by_user = {}
     for person in people:

@@ -5,6 +5,7 @@ from pathlib import Path
 from sqlalchemy import text
 from app.core.database import SessionLocal, engine
 from app.models import User
+from app.services.staff_access import can_operate, change_role
 from app.core import audit  # Register transactional role-change history.
 
 
@@ -18,7 +19,7 @@ def main():
         if args.apply and engine.dialect.name == 'sqlite':
             db.execute(text('BEGIN IMMEDIATE'))
         actor = db.get(User, args.actor_id)
-        if not actor or actor.role not in ('admin', 'reviewer') or actor.account_status != 'active':
+        if not actor or not can_operate(db, actor) or actor.account_status != 'active':
             parser.error('Cần tài khoản Reviewer đang hoạt động')
         users = db.query(User).filter_by(role='admin').all()
         count = len(users)
@@ -30,7 +31,7 @@ def main():
             snapshot(engine.url.database, args.backup)
             db.info['actor_id'] = actor.id
             for user in users:
-                user.role = 'reviewer'
+                change_role(db, user, 'reviewer')
             db.commit()
         print(json.dumps({'changed': count if args.apply else 0, 'pending': 0 if args.apply else count, 'role': 'reviewer'}))
 

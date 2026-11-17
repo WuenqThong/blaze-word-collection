@@ -24,6 +24,9 @@ dist/
 *.log
 Blaze Cabin.app/
 
+# Private design sources: keep on this computer only.
+/designs/
+
 # ML runtime artifacts (source and dependency locks remain tracked)
 ml/data/
 ml/datasets/
@@ -38,8 +41,19 @@ ml/cache/
 *.sqlite3
 *.sqlite-wal
 *.sqlite-shm
-.claude/
+# Private local assistant files, including every filename casing.
+*[cC][lL][aA][uU][dD][eE]*
+/.vscode/settings.json
 # Generated reports and exports
 docs/reports/
 docs/screenshots/
 *.docx
+
+# Rebuildable checks and compiler caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.tsbuildinfo
+coverage/
+backups/
+releases/

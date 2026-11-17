@@ -18,6 +18,7 @@ import "./styles/demo.css";
 import "./styles/blaze-workspace.css";
 import "./styles/auth.css";
 import "./styles/account.css";
+import "./styles/community.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

@@ -11,6 +11,7 @@ from collections import Counter
 
 from fastapi import HTTPException
 from app.services.curation import valid_curated
+from app.services.review_binding import binding, bound_votes
 from app.services.dataset_package import POLICY
 from app.models.dialect import (
     DialectContributionMeta as M, DialectSource as S,
@@ -38,7 +39,7 @@ def _consent(c, m):
 def _valid(db, c):
     m, source = db.get(M, c.id), db.get(S, c.source_id)
     consent = _consent(c, m)
-    votes = db.query(V).filter_by(contribution_id=c.id).all()
+    votes = bound_votes(db, c)
     return bool(
         c.status == "VERIFIED" and not c.withdrawn_at and source and source.rights_confirmed
         and consent.get("collect") is True and consent.get("train") is True
@@ -96,6 +97,22 @@ def _groups(db, items):
     return {cid: root(cid) for cid in roots}
 
 
+def release_candidates(db, eligible_items):
+    """The dashboard and exporter use the same validation and deduplication."""
+    from app.services.dataset_package import duplicate_key
+    allowed, representatives, duplicates = {}, {}, {}
+    for c in sorted(eligible_items, key=lambda item: item.id):
+        if not _valid(db, c):
+            continue
+        key = duplicate_key(c.raw, db.get(M, c.id).curated)
+        if key in representatives:
+            duplicates[c.id] = representatives[key]
+        else:
+            representatives[key] = c.id
+            allowed[c.id] = c
+    return allowed, duplicates
+
+
 def build_release(db, eligible_items, ids=None, client_splits=None, grouping_items=None):
     """Return records/splits/data_card/warnings/rule_version; ignore client splits.
 
@@ -104,16 +121,7 @@ def build_release(db, eligible_items, ids=None, client_splits=None, grouping_ite
     rows (including not-yet-curated intermediates) participate in grouping.
     """
     items = sorted(list(eligible_items), key=lambda c: c.id)
-    allowed = {c.id: c for c in items if _valid(db, c)}
-    from app.services.dataset_package import duplicate_key
-    representatives, duplicates = {}, {}
-    for cid, c in allowed.items():
-        key = duplicate_key(c.raw, db.get(M, cid).curated)
-        if key in representatives:
-            duplicates[cid] = representatives[key]
-        else:
-            representatives[key] = cid
-    allowed = {cid: c for cid, c in allowed.items() if cid not in duplicates}
+    allowed, duplicates = release_candidates(db, items)
     selected = sorted(allowed if ids is None else set(ids))
     if not selected or any(cid not in allowed for cid in selected):
         raise HTTPException(409, "Mẫu chưa đủ CURATED, hai reviewer độc lập hoặc quyền/consent; hãy tải lại.")
@@ -147,6 +155,7 @@ def build_release(db, eligible_items, ids=None, client_splits=None, grouping_ite
         records.append({"id": cid, "source_id": c.source_id, "raw": c.raw,
                         "curated": m.curated, "sense_id": m.sense_id, "split": splits[str(cid)]})
         provenance.append({"id": cid, "source_id": c.source_id,
+                           **binding(db, c),
                            "contributor_ref": _digest(['contributor', c.owner_id]),
                            "source_digest": _digest(normalize(source.evidence)),
                            "group": _digest([RULE_VERSION, groups[cid]]),

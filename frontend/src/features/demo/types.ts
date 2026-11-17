@@ -10,6 +10,7 @@ export interface Consent {
   version: string;
 }
 export interface Person {
+  operations?: boolean;
   id: string;
   name: string;
   role: Role;
@@ -114,7 +115,15 @@ export interface Raw {
   response: "answer" | "unknown" | "no_term" | "same_standard";
   mediaIds: string[];
 }
+export interface ReviewRevision {
+  revision: number; digest: string; content: Raw; senseId: string | null; qaAudio: string;
+  status: Verdict; votes: Vote[]; archivedAt: string;
+}
 export interface Contribution {
+  clientRef?: string;
+  reviewDigest?: string;
+  reviewRevision?: number;
+  reviewHistory?: ReviewRevision[];
   qualityReasons?: string[];
   sync?: { status: "pending" | "rejected" | "retry" | "accepted" | "discarded"; approved: boolean; attempts: number; reason?: string; attemptedAt?: string; payload?: Record<string, unknown> };
   duplicateOf?: string;
@@ -264,14 +273,11 @@ export interface DemoState {
   regions: string[];
   topics: string[];
   rewardEnabled: boolean;
-  simulate: "none" | "offline" | "spam";
   backupAt: string | null;
 }
 export type Command =
   | { type: "resolveGameConflict"; id: string; choice: "server" | "local" }
   | { type: "autoStart"; consent: Consent; campaignId: string; id: string; /** Đề do server chọn; bỏ qua nếu không còn trong pool. */ examId?: string }
-  | { type: "actor"; id: string }
-  | { type: "simulate"; value: DemoState["simulate"] }
   | {
       type: "start";
       examId: string;
@@ -309,13 +315,14 @@ export type Command =
   | { type: "consent"; id: string; consent: Consent; withdraw: boolean }
   | {
       type: "vote";
+      expectedDigest?: string;
       id: string;
       verdict: Vote["verdict"];
       checks: boolean[];
       note: string;
     }
-  | { type: "decide"; id: string; verdict: Vote["verdict"]; note: string }
-  | { type: "curate"; id: string; raw: Raw; senseId: string; qaAudio: string }
+  | { type: "decide"; expectedDigest?: string; id: string; verdict: Vote["verdict"]; note: string }
+  | { type: "curate"; expectedDigest?: string; id: string; raw: Raw; senseId: string; qaAudio: string }
   | { type: "question"; question: Question }
   | { type: "exam"; exam: Exam }
   | { type: "publish"; id: string; real: boolean }
