@@ -244,7 +244,6 @@ export function seed(): DemoState {
     regions: [...DISTRICTS],
     topics: ["Sinh hoạt", "Gia đình", "Nghề nghiệp", "Ẩm thực"],
     rewardEnabled: false,
-    simulate: "none",
     backupAt: null,
   };
   addDatasetQuestions(state);

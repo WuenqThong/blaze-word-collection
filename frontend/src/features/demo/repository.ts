@@ -111,15 +111,6 @@ export class DemoRepository {
       throw error;
     }
   }
-  async reset() {
-    const db = await this.database;
-    const tx = db.transaction(["state", "blobs"], "readwrite");
-    const state = seed();
-    await tx.objectStore("state").put(state, "main");
-    await tx.objectStore("blobs").clear();
-    await tx.done;
-    this.listeners.forEach((fn) => fn(state));
-  }
   async putBlob(id: string, blob: Blob) {
     const db = await this.database;
     await db.put("blobs", blob, id);

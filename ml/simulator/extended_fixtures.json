@@ -1,8 +1,0 @@
-{
-  "version": "simulator-independent-groups-v1",
-  "synthetic": true,
-  "usage": "Deterministic software fixtures only; not training or benchmark data.",
-  "independent_groups": 12,
-  "samples_per_group": 2,
-  "isolated_relations": ["source", "variant", "family", "sense"]
-}

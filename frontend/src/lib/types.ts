@@ -1,6 +1,7 @@
 export type Role = "admin" | "annotator" | "reviewer";
 
 export interface User {
+  operations?: boolean;
   id: number;
   email: string;
   full_name: string;

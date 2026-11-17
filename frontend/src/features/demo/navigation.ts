@@ -15,15 +15,15 @@ export function workspacePath(path: string) {
   return path.replace(/^\/demo\/admin\//, "/demo/reviewer/").replace(/^\/demo\/reviewer\/dashboard$/, "/demo/reviewer/review");
 }
 
-export function navigationFor(role: Role): string[][] {
-  if (["admin", "reviewer"].includes(role)) return adminGroups.map((g) => [g.links[0][0], g.label]);
-  return [["/demo", "Trang chủ"], ["/demo/play", "Chơi trò chơi"], ...(role === "contributor" ? [["/demo/contribute", "Góp trực tiếp"], ["/demo/history", "Lượt chơi của tôi"]] : [])];
+export function navigationFor(role: Role, operations = true): string[][] {
+  if (["admin", "reviewer"].includes(role)) return adminGroups.filter((_,i)=>operations || i===0).map((g) => [g.links[0][0], g.label]);
+  return [["/demo", "Trang chủ"], ["/demo/play", "Chơi trò chơi"], ...(role === "contributor" ? [["/demo/contribute", "Đóng góp từ, câu"], ["/demo/history", "Lượt chơi của tôi"]] : [])];
 }
 
 // Frontend demo scope only. Real identity and data authorization belong on the API.
-export function routeAllowed(role: Role, path: string): boolean {
-  if (path === "/demo/internal" || path === "/demo/account") return true;
-  if (["admin", "reviewer"].includes(role)) return true;
+export function routeAllowed(role: Role, path: string, operations = true): boolean {
+  if (path === "/demo/account") return true;
+  if (["admin", "reviewer"].includes(role) && (operations || ["/demo/reviewer/review", "/demo/admin/review"].includes(path))) return true;
   if (role === "contributor" && path === "/demo/contribute") return true;
   return ["/demo", "/demo/play", "/demo/rights", "/demo/history"].includes(path) || /^\/demo\/game\/[^/]+$/.test(path);
 }

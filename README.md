@@ -26,14 +26,13 @@ Cấu hình backend theo `backend/.env.example`; không commit `.env`, DB, audio
 cd frontend
 npm run lint -- --max-warnings 0
 npm run build
-npm test
-cd ..\backend
-.\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-CI kiểm tra frontend, backend với DB tạm và container một cổng. QA riêng: `scripts/start-qa.ps1`; dữ liệu và tài khoản kiểm thử ở ngoài repository.
+CI kiểm lint/build frontend, biên dịch Python và build image Docker. Bộ kiểm thử tự động, simulator và công cụ QA đã được gỡ khỏi source theo yêu cầu.
 
 ## Triển khai bằng Docker
+
+Anh Mạnh xem [hướng dẫn bàn giao triển khai](deploy/README.md) để cấu hình HTTPS, tạo tài khoản quản lý, chuyển DB, backup và nghiệm thu. Tạo lại gói source bằng `python scripts/package_release.py`; ZIP và checksum nằm ngoài repository trong thư mục `../blaze-releases/`.
 
 Sao chép `.env.pilot.example` thành `.env.pilot`, điền secrets riêng, origin HTTPS và IP proxy được tin cậy. Compose chỉ mở cổng trên loopback, cần reverse proxy theo `deploy/blaze.nginx.conf`.
 
@@ -55,9 +54,10 @@ docker compose --env-file .env.pilot up -d
 
 ## Cấu trúc
 
-- `frontend/`: giao diện React và kiểm thử.
+- `frontend/`: giao diện React.
 - `backend/`: API, dịch vụ nghiệp vụ, migration và công cụ dữ liệu.
 - `deploy/`: cấu hình proxy; `.github/workflows/`: CI.
-- `ml/`: công cụ thử nghiệm audio/ML độc lập; xem `ml/README.md`. Audio, model và kết quả chạy không nằm trong Git.
-- `test-fixtures/`: dữ liệu tổng hợp cho kiểm thử.
-- `docs/`: tài liệu kỹ thuật nền; báo cáo tiến độ và tài liệu phát sinh không đưa lên repo.
+- `ml/`: công cụ xử lý audio/ML độc lập; xem `ml/README.md`. Audio, model và kết quả chạy không nằm trong Git.
+- `docs/`: [tài liệu hiện hành](docs/README.md), thiết kế tham chiếu và `legacy/` lưu tài liệu lịch sử.
+- `designs/`: thiết kế riêng chỉ lưu local; được bỏ qua bởi Git, Docker và công cụ đóng gói release, không thuộc luồng chạy ứng dụng.
+- `scripts/`: công cụ khởi động local, preview audio và đóng gói; `backend/scripts/` quản lý DB và tài khoản.

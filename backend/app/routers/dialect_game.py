@@ -8,6 +8,7 @@ from app.core.database import get_db, utcnow
 from app.models.game import GameResource, GameResourceVersion, GameSession, GameCommand
 from app.routers.dialect import active, admin, ACCEPTED_CONSENT_VERSIONS
 from app.services import game_state as game
+from app.services.staff_access import can_operate
 
 router = APIRouter(prefix='/dialect/game', tags=['dialect-game'])
 
@@ -40,7 +41,7 @@ class CommandInput(BaseModel):
 @router.get('/catalog')
 def get_catalog(db:Session=Depends(get_db), user=Depends(active)):
     game.bootstrap(db)
-    result = game.catalog(db,user.role in ('admin', 'reviewer'))
+    result = game.catalog(db,can_operate(db, user))
     for kind,plural in [('question','questions'),('exam','exams'),('campaign','campaigns'),('task','tasks'),('bank_source','bankSources')]:
         for item in result[plural]: item['serverRevision']=result['revisions'][f"{kind}:{item['id']}"]
     # Catalog values are already JSON primitives. Avoid FastAPI's recursive
@@ -71,14 +72,14 @@ def start(body:StartInput,db:Session=Depends(get_db),user=Depends(active)):
 @router.get('/sessions')
 def sessions(cursor:str=Query(default='',max_length=128),limit:int=Query(default=100,ge=1,le=200),db:Session=Depends(get_db),user=Depends(active)):
     query=db.query(GameSession)
-    if user.role not in ('admin', 'reviewer'):query=query.filter_by(user_id=user.id)
+    if not can_operate(db, user):query=query.filter_by(user_id=user.id)
     rows=query.filter(GameSession.session_ref>cursor).order_by(GameSession.session_ref).limit(limit+1).all()
     return JSONResponse({'items':[game.pack_session(row,user) for row in rows[:limit]],'next_cursor':rows[limit-1].session_ref if len(rows)>limit else None}, headers={'Cache-Control': 'no-store'})
 
 
 def owned(db,ref,user):
     row=db.get(GameSession,ref,with_for_update=True)
-    if not row or (row.user_id!=user.id and user.role not in ('admin', 'reviewer')):raise HTTPException(404,'Không tìm thấy lượt chơi của tài khoản này')
+    if not row or (row.user_id!=user.id and not can_operate(db, user)):raise HTTPException(404,'Không tìm thấy lượt chơi của tài khoản này')
     return row
 
 

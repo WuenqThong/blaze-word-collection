@@ -15,6 +15,11 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
 
 
+def public_user(user, db):
+    from app.services.staff_access import can_operate
+    return UserPublic.model_validate(user).model_copy(update={'operations': can_operate(db, user)})
+
+
 @router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 def register(
     payload: RegisterRequest,
@@ -23,7 +28,7 @@ def register(
 ):
     user = auth.register(payload)
     _set_auth_cookie(response, user)
-    return AuthResponse(user=UserPublic.model_validate(user))
+    return AuthResponse(user=public_user(user, auth.db))
 
 
 @router.post("/login", response_model=AuthResponse)
@@ -34,7 +39,7 @@ def login(
 ):
     user = auth.authenticate(payload)
     _set_auth_cookie(response, user)
-    return AuthResponse(user=UserPublic.model_validate(user))
+    return AuthResponse(user=public_user(user, auth.db))
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -44,8 +49,8 @@ def logout(response: Response):
 
 
 @router.get("/me", response_model=UserPublic)
-def me(user: User = Depends(get_current_user)):
-    return UserPublic.model_validate(user)
+def me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return public_user(user, db)
 
 
 @router.patch("/me", response_model=UserPublic)
@@ -54,7 +59,7 @@ def update_me(
     user: User = Depends(get_current_user),
     auth: AuthService = Depends(get_auth_service),
 ):
-    return UserPublic.model_validate(auth.update_name(user, payload.full_name))
+    return public_user(auth.update_name(user, payload.full_name), auth.db)
 
 
 @router.post("/password", status_code=status.HTTP_204_NO_CONTENT)

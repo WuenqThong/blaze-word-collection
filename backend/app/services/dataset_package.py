@@ -7,7 +7,7 @@ from collections import Counter
 from datetime import datetime
 
 SCHEMA = 'dialect-dataset-package-v1'
-POLICY = 'dialect-release-connected-v4'
+POLICY = 'dialect-release-connected-v5'
 
 
 def checksum(value):
@@ -81,6 +81,8 @@ def verify_package(package):
         seen, duplicates = {}, set()
         for r in records:
             p = provenance[r['id']]
+            require(type(p.get('review_revision')) is int and p['review_revision'] >= 1)
+            require(isinstance(p.get('review_digest'), str) and re.fullmatch('[a-f0-9]{64}', p['review_digest']))
             require(r['split'] == allocation[p['group']])
             require(r['source_id'] == p['source_id'] and type(r['source_id']) is int)
             require(isinstance(r['raw'], dict) and isinstance(r['curated'], dict))

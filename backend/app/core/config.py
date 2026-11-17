@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     blaze_api_token: SecretStr = Field(default=SecretStr(''), exclude=True)
     blaze_translation_model: str = 'blaze-translate-1'
     jwt_secret: str = "dev-secret-change-me"
-    jwt_alg: str = "HS256"
+    jwt_alg: Literal["HS256"] = "HS256"
     access_token_ttl_min: int = 60
     cookie_name: str = "access_token"
     cookie_secure: bool = False

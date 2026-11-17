@@ -1,3 +1,4 @@
+name: blaze-word-collection
 services:
   app:
     build:
@@ -5,6 +6,13 @@ services:
       dockerfile: Dockerfile
     image: ${BLAZE_IMAGE_REPOSITORY:-blaze-pilot}:${BLAZE_RELEASE:-local}
     restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     ports:
       - "127.0.0.1:${BLAZE_PORT:-7777}:7777"
     environment:

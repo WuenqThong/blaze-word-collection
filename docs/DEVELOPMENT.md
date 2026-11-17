@@ -1,136 +1,56 @@
-# Hướng dẫn phát triển
+# Phát triển và kiểm tra
 
-## Yêu cầu
+Chạy từ root trên PowerShell, trừ khi đã chuyển thư mục. Dùng Node.js 22 và Python; CI/container dùng Python 3.12. Giữ lockfile và cài frontend bằng `npm ci`.
 
-| Công cụ | Phiên bản | Ghi chú |
-|---|---|---|
-| Python | 3.12 | Python 3.14 chưa được kiểm tra với `passlib` / `bcrypt==4.0.1` |
-| Node.js | 20.19+ | Vite 8 cần từ bản này trở lên |
-| MinIO | bản bất kỳ | `brew install minio/stable/minio` (kèm `mc`) |
-| libmagic | — | Cho `python-magic`: `brew install libmagic` |
+## Khởi động local
 
-## Cổng & dịch vụ
-
-| Dịch vụ | Local | Docker compose |
-|---|---|---|
-| Frontend (Vite dev) | `:7777` (`strictPort`) | `:7777` |
-| Backend (uvicorn) | `:8765` | `:8765` → container `:8000` |
-| MinIO S3 API | `:9100` | `:9100` → `:9000` |
-| MinIO console | `:9101` (`minioadmin` / `minioadmin`) | `:9101` |
-
-## Chạy local
-
-Xem các bước trong [README](../README.md#chạy-nhanh-local-không-docker). Ba process chạy song song:
-
-```bash
-# Terminal 1 — từ thư mục gốc repo
-MINIO_ROOT_USER=minioadmin MINIO_ROOT_PASSWORD=minioadmin \
-  minio server .minio_data --address :9100 --console-address :9101
-
-# Terminal 2
-cd backend && .venv/bin/uvicorn app.main:app --reload --port 8765
-
-# Terminal 3
-cd frontend && npm run dev
+```powershell
+cd frontend
+npm ci
+cd ../backend
+py -m venv .venv
+./.venv/Scripts/python.exe -m pip install -r requirements.txt
+cd ..
+./scripts/start-local.ps1
 ```
 
-Bucket `audios` được backend tự tạo khi khởi động (`StorageService._ensure_bucket`).
+Mở `http://localhost:7777/demo`. Script build và phục vụ frontend/API chung cổng. Chạy lại sau khi sửa frontend; `-SkipBuild` chỉ dùng khi build đã cập nhật. Cấu hình theo `backend/.env.example` và `frontend/.env.example`.
 
-## Docker compose
+Nếu cần Vite hot reload, chạy API từ `backend/` bằng `.venv/Scripts/python.exe -m scripts.serve` (8765), và `npm run dev` từ `frontend/` (7777). Giữ `VITE_API_BASE_URL=/api`. Không chạy hai dịch vụ cùng chiếm cổng 7777.
 
-```bash
-docker compose up -d --build
+## Kiểm tra
+
+```powershell
+cd frontend
+npm run lint -- --max-warnings 0
+npm run build
+cd ..
+git diff --check
 ```
 
-- Backend dùng SQLite tại volume `backend_data:/data`, frontend chạy Vite dev server với code được mount.
-- **Sự cố đã biết:** `minio/minio:latest` và `minio/mc:latest` có thể bị Docker Hub từ chối pull ("pull access denied"). Cách xử lý:
-  - chạy MinIO local như trên và chỉ dựng backend + frontend bằng Docker, hoặc
-  - đổi image sang một registry/tag mà máy pull được.
+Bộ test tự động, simulator, fixture và script chạy/seed QA đã được gỡ khỏi repository theo yêu cầu. Kiểm tra thủ công bằng DB bản sao và browser profile riêng để không trộn dữ liệu với ứng dụng thường ngày.
 
-## Biến môi trường
+## Schema và backup
 
-### Backend (`backend/.env`, đọc bởi `app/core/config.py`)
+Migration ở `backend/migrations/`. Chạy công cụ từ `backend/`:
 
-| Biến | Mặc định | Mô tả |
-|---|---|---|
-| `DATABASE_URL` | `sqlite:///./annotator.db` | Local nên dùng `sqlite:////Users/<you>/.annotator/annotator.db` để DB nằm ngoài repo |
-| `JWT_SECRET` | `dev-secret-change-me` | **Bắt buộc đổi** khi deploy |
-| `JWT_ALG` / `ACCESS_TOKEN_TTL_MIN` | `HS256` / `60` | |
-| `COOKIE_SECURE` / `COOKIE_SAMESITE` | `false` / `lax` | Bật `COOKIE_SECURE=true` khi chạy HTTPS |
-| `CORS_ORIGINS` | localhost:5173, :7777 | Dạng JSON list |
-| `MINIO_ENDPOINT` | `127.0.0.1:9000` | Local dùng `127.0.0.1:9100` |
-| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | `minioadmin` | |
-| `MINIO_SECURE` / `MINIO_BUCKET` / `MINIO_PRESIGN_TTL_SEC` | `false` / `audios` / `600` | |
-| `MAX_AUDIO_SIZE_MB` / `MAX_FILES_PER_UPLOAD` / `MAX_FILES_PER_SYNC` | `50` / `200` / `500` | |
-| `POINT_TO_VND` / `MIN_WITHDRAWAL_POINTS` | `50` / `100` | Quy đổi điểm và ngưỡng rút |
-
-### Frontend (`frontend/.env`)
-
-| Biến | Mặc định |
-|---|---|
-| `VITE_API_BASE_URL` | `http://127.0.0.1:8765/api` |
-
-> Cookie chỉ được gửi khi frontend và backend cùng *site*. Dùng `localhost` cho cả hai, hoặc `127.0.0.1` cho cả hai. Đừng trộn, nếu không sẽ bị 401.
-
-## Quy ước code
-
-**Backend**
-- Router chỉ nhận request, kiểm tra quyền và gọi service. Logic nghiệp vụ đặt trong `services/`.
-- Lỗi nghiệp vụ: `raise HTTPException(status.HTTP_xxx, detail="<message tiếng Việt>")`. Frontend hiển thị nguyên `detail`.
-- Enum lưu dạng `String`, giá trị hợp lệ ghi trong comment cạnh cột.
-- Thời gian: dùng `app.core.database.utcnow()` (UTC, naive), không dùng `datetime.utcnow()`.
-- Quyền admin: `Depends(require_role("admin"))`. Quyền theo project: `ProjectService.assert_member`.
-
-**Frontend**
-- Code mới đặt trong `src/features/<domain>/`. API nằm ở `src/api/<domain>.ts` và dùng chung `apiClient`. Type nằm ở `src/lib/<domain>Types.ts`.
-- UI dùng react-bootstrap + bootstrap-icons (`bi-*`). Style chung ở `src/styles/theme.css`.
-- Báo lỗi bằng `extractError(err)`. Hộp xác nhận dùng `ConfirmProvider`.
-
-## Công việc thường gặp
-
-### Thêm một loại task mới
-1. **Backend:**
-   - Khai báo trường payload bắt buộc trong `REQUIRED_BY_TASK_TYPE`. Dict này bị **khai báo trùng** ở `services/audio_service.py` (dùng khi upload và phân bổ) và `services/prelabel_parser.py` (dùng khi parse file), nên phải sửa cả hai.
-   - Khai báo validator cho answer trong `REQUIRED_ANSWER_BY_TYPE` (`services/allocation_service.py`).
-   - Thêm type vào danh sách được phép ở `routers/annotate.py` (`my_next_task`).
-   - Nếu type cần spawn task con hoặc chấm điểm riêng, sửa `AllocationService.submit`.
-2. **Frontend:**
-   - Thêm mode vào `features/annotate/modes.ts`.
-   - Thêm UI trả lời trong `AnnotatePage.tsx` / `Playground.tsx`.
-   - Thêm lựa chọn khi tạo project (`ProjectForm.tsx`) và ô nhập điểm (`ProjectScoringForm.tsx`).
-3. Cập nhật bảng "Loại task" trong [ARCHITECTURE.md](ARCHITECTURE.md#loại-task).
-
-### Thêm endpoint
-1. Tạo schema trong `schemas/`.
-2. Viết logic trong service tương ứng.
-3. Thêm route vào router. Nếu là router mới, đăng ký trong `app/main.py` với `prefix="/api"`.
-4. Thêm hàm gọi trong `frontend/src/api/`.
-5. Cập nhật [API.md](API.md).
-
-### Thay đổi schema DB
-Project **chưa có migration**. `create_all` chỉ tạo bảng còn thiếu, **không** thêm cột vào bảng đã có. Khi thêm hoặc sửa cột:
-- Dev: xoá file DB (mất dữ liệu), hoặc tự chạy `ALTER TABLE ... ADD COLUMN ...` bằng `sqlite3`.
-- Trước khi có dữ liệu thật, nên thêm Alembic.
-
-### Tạo / nâng quyền admin
-```bash
-cd backend && .venv/bin/python -m scripts.create_admin <email> <password> "<Họ tên>"
+```powershell
+./.venv/Scripts/python.exe -m scripts.db_migrate --help
+./.venv/Scripts/python.exe -m scripts.db_backup --help
+./.venv/Scripts/python.exe -m scripts.db_restore --help
 ```
-Nếu email đã tồn tại, script nâng user đó lên admin và giữ nguyên mật khẩu. Lưu ý: email có đuôi dành riêng như `.local` hoặc `.test` sẽ bị validator của form đăng nhập (`EmailStr`) từ chối.
 
-## Kiểm tra trước khi commit
+- `db_migrate init` chỉ tạo DB mới.
+- `adopt` kiểm schema DB chưa có phiên bản trên bản sao đích, không ghi đè nguồn.
+- Với DB đã có phiên bản, dùng `upgrade` theo hướng dẫn CLI, giữ backup trước khi nâng cấp.
+- `db_backup SOURCE DESTINATION` tạo snapshot SQLite nhất quán; `db_restore` phục hồi vào đường dẫn mới.
 
-```bash
-cd frontend && npm run lint && npm run build   # build có chạy tsc type-check
-```
-Backend chưa có test hay linter. Hãy kiểm tra thủ công qua Swagger (`/docs`).
+Không xóa DB để sửa schema. Kiểm migration và backup trên bản sao trước khi áp dụng cho dữ liệu thật. Production từ chối khởi động khi schema chưa ở migration head.
 
-## Xử lý sự cố
+## Quy ước thư mục
 
-| Triệu chứng | Nguyên nhân / cách xử lý |
-|---|---|
-| `nohup: .venv/bin/uvicorn: No such file` | venv bị hỏng hoặc được tạo ở đường dẫn khác. Xoá `backend/.venv` rồi tạo lại |
-| 401 dù đã đăng nhập | Frontend và backend khác host (`localhost` vs `127.0.0.1`), hoặc thiếu origin trong `CORS_ORIGINS` |
-| Upload / phát audio lỗi | MinIO chưa chạy, hoặc `MINIO_ENDPOINT` sai cổng |
-| Annotator không nhận được task | Project chưa `active`, user không phải member của project private, task đã đủ `redundancy`, hoặc tài khoản đang `under_review` |
-| Frontend báo cổng 7777 bận | `strictPort: true`: tắt process đang chiếm cổng đó |
+Endpoint đặt trong `backend/app/routers/`, nghiệp vụ trong `services/`, schema trong `migrations/`. Frontend chia theo feature. Trước khi xóa module, kiểm import động, route và build. Không format lại toàn bộ source không liên quan khi workspace có thay đổi.
+
+Tài liệu hiện hành ở `docs/`; tài liệu cũ ở `docs/legacy/`; thiết kế nguồn ở `designs/`; thử nghiệm ML/audio ở `ml/`. Venv, dependency, build, cache, DB và kết quả chạy là dữ liệu local, không đưa vào Git.
+
+Kiểm thử local không thay thế nghiệm thu HTTPS, cookie, proxy, khôi phục backup và tải đồng thời trên server thật.

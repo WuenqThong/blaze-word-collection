@@ -1,0 +1,9 @@
+{
+  "version": "public-game-content-v1",
+  "excludedRowIds": ["QND-156", "QND-R50-071", "QND-226", "QND-298", "QND-321", "QND-322", "QND-372", "QND-426", "QND-453"],
+  "restrictedPhrases": [
+    "đĩ", "đụ", "địt", "đéo", "lồn", "cặc", "dái", "cứt", "ỉa", "đái",
+    "chửi tục", "sinh dục", "dâm", "hiếp dâm", "đấm", "dọa đánh",
+    "đánh vào đầu", "gõ vào đầu", "tát vào đầu", "tát vào tai"
+  ]
+}

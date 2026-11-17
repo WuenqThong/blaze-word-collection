@@ -29,9 +29,13 @@ from app.models.dialect import DialectRelease as R
 from app.models.dialect import DialectSetting as ST
 from app.models.dialect import DialectSource as S
 from app.models.dialect import DialectSourceRights as SR
+from app.models.dialect import DialectVote as V
 from app.models.user import User
 from app.routers.dialect import (ACCEPTED_CONSENT_VERSIONS, active, admin, consent_of, curated_ok, eligible, event, find,
                                  meta_of, normal, pack, release_meta, reviewer)
+
+from app.services.collection_consent import contribution_write, locked_contribution, lock_contributions, require_collection_consent
+from app.services.review_binding import require_digest, content_of, normalized, archive_current, binding, bound_votes
 
 router = APIRouter(prefix="/dialect", tags=["dialect-workspace"])
 
@@ -67,12 +71,13 @@ def participant(db, uid, create=False):
 
 def person(db, u: User):
     from app.core.roles import canonical_role
+    from app.services.staff_access import can_operate
     flags = db.get(DP, u.id)
     profile = db.get(P, u.id)
     region = (flags.review_region if flags else "") or (profile.usage_area if profile else "") or (profile.upbringing_area if profile else "")
     return {"id": u.id, "full_name": u.full_name, "role": canonical_role(u.role), "account_status": u.account_status, "region": region,
             "verified": bool(flags and flags.verified), "risk": flags.risk if flags else "clear",
-            "review_region": flags.review_region if flags else "", "appeal": flags.appeal if flags else ""}
+            "review_region": flags.review_region if flags else "", "appeal": flags.appeal if flags else "", "operations": can_operate(db, u)}
 
 
 def source_row(db, s: S):
@@ -137,27 +142,28 @@ class ConsentInput(BaseModel):
 
 @router.post("/contributions/{cid}/consent")
 def change_consent(cid: int, body: ConsentInput, db: Session = Depends(get_db), user: User = Depends(active)):
-    item = find(db, cid)
-    if item.owner_id != user.id and user.role not in ('admin', 'reviewer'):
-        raise HTTPException(403, "Không có quyền quản lý mẫu này")
-    if item.withdrawn_at and not body.withdraw:
-        raise HTTPException(409, "Mẫu đã rút không thể khôi phục; hãy gửi bản mới")
-    meta = meta_of(db, cid)
-    previous = consent_of(item, meta)
-    if item.owner_id != user.id:
-        if (body.consent.version != previous.get('version') or
-                any(getattr(body.consent, key) and not previous.get(key, False)
-                    for key in ('collect', 'train', 'public', 'audio'))):
-            raise HTTPException(403, "Chỉ người góp được mở rộng quyền sử dụng mẫu")
-    meta = meta_of(db, cid, create=True)
-    meta.consent = body.consent.model_dump()
-    if meta.consent != previous:
-        event(db, item, user, "CONSENT_UPDATED", ", ".join(f"{k}={'có' if v else 'không'}" for k, v in meta.consent.items() if k != "version"))
-    if body.withdraw and not item.withdrawn_at:
-        item.withdrawn_at = utcnow()
-        event(db, item, user, "WITHDRAWN", "Đã rút quyền sử dụng; ngừng xuất trong các bản phát hành được hệ thống kiểm soát")
-    db.commit()
-    return pack(item, db, user)
+    with contribution_write(db):
+        item = locked_contribution(db, cid)
+        if item.owner_id != user.id and user.role not in ('admin', 'reviewer'):
+            raise HTTPException(403, "Không có quyền quản lý mẫu này")
+        if item.withdrawn_at and not body.withdraw:
+            raise HTTPException(409, "Mẫu đã rút không thể khôi phục; hãy gửi bản mới")
+        meta = db.query(M).filter_by(contribution_id=cid).populate_existing().with_for_update().first()
+        previous = consent_of(item, meta)
+        if item.owner_id != user.id:
+            if (body.consent.version != previous.get('version') or
+                    any(getattr(body.consent, key) and not previous.get(key, False)
+                        for key in ('collect', 'train', 'public', 'audio'))):
+                raise HTTPException(403, "Chỉ người góp được mở rộng quyền sử dụng mẫu")
+        meta = meta_of(db, cid, create=True)
+        meta.consent = body.consent.model_dump()
+        if meta.consent != previous:
+            event(db, item, user, "CONSENT_UPDATED", ", ".join(f"{k}={'có' if v else 'không'}" for k, v in meta.consent.items() if k != "version"))
+        if body.withdraw and not item.withdrawn_at:
+            item.withdrawn_at = utcnow()
+            event(db, item, user, "WITHDRAWN", "Đã rút quyền sử dụng; ngừng xuất trong các bản phát hành được hệ thống kiểm soát")
+        db.commit()
+        return pack(item, db, user)
 
 
 @router.post("/sessions/{ref}/withdraw")
@@ -168,27 +174,28 @@ def withdraw_session(ref: str, db: Session = Depends(get_db), user: User = Depen
 
 
 def withdraw_session_data(db, ref, user):
-    allocation = db.get(GA, ref)
-    if allocation and allocation.user_id != user.id:
-        raise HTTPException(403, 'Lượt chơi thuộc tài khoản khác')
-    ids = [cid for (cid,) in db.query(M.contribution_id).filter(M.session_ref == ref).all()]
-    items = db.query(C).filter(C.id.in_(ids), C.owner_id == user.id).all() if ids else []
-    for item in items:
-        if not item.withdrawn_at:
-            item.withdrawn_at = utcnow()
-            event(db, item, user, "WITHDRAWN", "Đã rút cùng lượt chơi")
-    allocation = db.get(GA, ref)
-    if allocation and allocation.user_id == user.id and not allocation.withdrawn_at:
-        allocation.withdrawn_at = utcnow()
-    receipt = db.get(GR, ref)
-    if receipt and receipt.user_id == user.id and not receipt.withdrawn_at:
-        receipt.withdrawn_at = utcnow()
-    from app.models.game import GameSession
-    play = db.get(GameSession, ref)
-    if play and play.user_id == user.id and play.data['state'] != 'withdrawn':
-        play.data = {**play.data, 'state': 'withdrawn'}
-        play.revision += 1
-    return len(items)
+    with contribution_write(db):
+        allocation = db.get(GA, ref)
+        if allocation and allocation.user_id != user.id:
+            raise HTTPException(403, 'Lượt chơi thuộc tài khoản khác')
+        ids = [cid for (cid,) in db.query(M.contribution_id).filter(M.session_ref == ref).all()]
+        items = [item for item in lock_contributions(db, ids) if item.owner_id == user.id] if ids else []
+        for item in items:
+            if not item.withdrawn_at:
+                item.withdrawn_at = utcnow()
+                event(db, item, user, "WITHDRAWN", "Đã rút cùng lượt chơi")
+        allocation = db.get(GA, ref)
+        if allocation and allocation.user_id == user.id and not allocation.withdrawn_at:
+            allocation.withdrawn_at = utcnow()
+        receipt = db.get(GR, ref)
+        if receipt and receipt.user_id == user.id and not receipt.withdrawn_at:
+            receipt.withdrawn_at = utcnow()
+        from app.models.game import GameSession
+        play = db.get(GameSession, ref)
+        if play and play.user_id == user.id and play.data['state'] != 'withdrawn':
+            play.data = {**play.data, 'state': 'withdrawn'}
+            play.revision += 1
+        return len(items)
 
 
 
@@ -277,6 +284,7 @@ def acknowledge_submission(ref: str, db: Session = Depends(get_db), user: User =
 
 
 class CurateInput(BaseModel):
+    expected_digest: str | None = None
     raw: dict
     sense_id: str = Field(default="", max_length=128)
     qa_audio: Literal["", "pass", "hold"] = ""
@@ -284,21 +292,39 @@ class CurateInput(BaseModel):
 
 @router.post("/reviews/{cid}/curate")
 def curate(cid: int, body: CurateInput, db: Session = Depends(get_db), user: User = Depends(reviewer)):
-    item = find(db, cid)
-    from app.routers.dialect_review_ops import enforce_region
-    enforce_region(db, user, item)
-    if item.owner_id == user.id:
-        raise HTTPException(403, "Không được tự chuẩn hóa mẫu của mình")
-    if item.status != "VERIFIED" or item.withdrawn_at:
-        raise HTTPException(409, "Chỉ chuẩn hóa mẫu đã xác minh và chưa rút")
-    from app.services.curation import normalize_curated
-    curated = normalize_curated(body.raw)
-    meta = meta_of(db, cid, create=True)
-    meta.curated, meta.sense_id, meta.qa_audio = curated, body.sense_id.strip() or str(cid), body.qa_audio
-    meta.curated_by, meta.curated_at = user.id, utcnow()
-    event(db, item, user, "CURATED", "Lưu bản chuẩn hóa; RAW giữ nguyên")
-    db.commit()
-    return pack(item, db, user)
+    with contribution_write(db):
+        item = locked_contribution(db, cid)
+        require_collection_consent(db, item)
+        require_digest(db, item, body.expected_digest)
+        from app.routers.dialect_review_ops import enforce_region
+        enforce_region(db, user, item)
+        if item.owner_id == user.id:
+            raise HTTPException(403, "Không được tự chuẩn hóa mẫu của mình")
+        if (item.status != "VERIFIED" and not (item.status == 'RAW' and db.get(M, cid) and db.get(M, cid).curated is not None)) or item.withdrawn_at:
+            raise HTTPException(409, "Chỉ chuẩn hóa mẫu đã xác minh và chưa rút")
+        from app.services.curation import normalize_curated
+        curated = normalize_curated(body.raw)
+        meta = meta_of(db, cid, create=True)
+        previous = content_of(item, meta)
+        from types import SimpleNamespace
+        proposed = SimpleNamespace(curated=curated, sense_id=normalized(body.sense_id) or str(cid), qa_audio=body.qa_audio)
+        changed = previous != content_of(item, proposed)
+        # An unbound legacy CURATED round cannot be blessed by saving it again.
+        valid_votes = bound_votes(db, item)
+        unsafe = meta.curated is not None and (len(valid_votes) != db.query(V).filter_by(contribution_id=cid).count()
+                                              or (item.status == 'VERIFIED' and len(valid_votes) < 2))
+        if changed or unsafe:
+            archive_current(db, item, user)
+        elif meta.curated is None:
+            # Only an exactly equivalent first CURATED projection may retain RAW votes.
+            for ballot in bound_votes(db, item):
+                ballot.rubric = {**ballot.rubric, **binding(db, item)}
+        if changed or meta.curated is None:
+            meta.curated, meta.sense_id, meta.qa_audio = curated, proposed.sense_id, body.qa_audio
+        meta.curated_by, meta.curated_at = user.id, utcnow()
+        event(db, item, user, "CURATED", "Lưu bản chuẩn hóa; RAW giữ nguyên" + ('; cần hai phiếu mới' if changed or unsafe else ''))
+        db.commit()
+        return pack(item, db, user)
 
 
 # --- Feedback (Report-style queue) ------------------------------------------
@@ -420,11 +446,12 @@ class ParticipantInput(BaseModel):
     verified: bool | None = None
     risk: Literal["clear", "hold"] | None = None
     review_region: str | None = Field(default=None, max_length=255)
+    operations: bool | None = None
 
 
 @router.put("/participants/{uid}")
 def update_participant(uid: int, body: ParticipantInput, db: Session = Depends(get_db), user: User = Depends(admin)):
-    if body.role is not None:
+    if body.role is not None or body.operations is not None:
         if db.get_bind().dialect.name == 'sqlite':
             db.execute(text('BEGIN IMMEDIATE'))
         else:
@@ -434,15 +461,30 @@ def update_participant(uid: int, body: ParticipantInput, db: Session = Depends(g
         raise HTTPException(404, "Không tìm thấy tài khoản")
     flags = participant(db, uid, create=True)
     from app.core.roles import canonical_role
-    current = {'role': canonical_role(target.role), 'verified': bool(flags.verified), 'risk': flags.risk or 'clear', 'review_region': flags.review_region or ''}
+    from app.services.staff_access import can_operate, preserve_operator
+    current = {'role': canonical_role(target.role), 'verified': bool(flags.verified), 'risk': flags.risk or 'clear', 'review_region': flags.review_region or '', 'operations': can_operate(db, target)}
     if body.expected and 'role' in body.expected:
         body.expected['role'] = canonical_role(body.expected['role'])
     if body.expected and any(key not in current or current[key] != value for key, value in body.expected.items()):
         raise HTTPException(409, 'Quyền hoặc phân công đã thay đổi. Tải lại rồi kiểm tra trước khi lưu.')
     if body.role is not None and body.role != target.role:
+        if body.role == 'annotator':
+            preserve_operator(db, target)
         if target.role in ('admin', 'reviewer') and body.role == 'annotator' and db.query(User).filter(User.role.in_(('admin', 'reviewer')), User.account_status == 'active').count() <= 1:
             raise HTTPException(409, "Cần giữ ít nhất một Reviewer")
-        target.role = body.role
+        from app.services.staff_access import change_role
+        change_role(db, target, body.role)
+        db.flush()
+    if body.operations is not None:
+        if body.operations and target.role not in ('reviewer', 'admin'):
+            raise HTTPException(422, 'Chỉ Reviewer được cấp quyền vận hành.')
+        if not body.operations:
+            preserve_operator(db, target)
+        grant = db.get(ST, f'operations:{uid}')
+        if grant is None:
+            db.add(ST(key=f'operations:{uid}', value=body.operations))
+        else:
+            grant.value = body.operations
     if body.verified is not None:
         flags.verified = body.verified
     if body.risk is not None:

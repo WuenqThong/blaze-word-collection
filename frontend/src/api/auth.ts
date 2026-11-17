@@ -28,12 +28,12 @@ export const authApi = {
   async logout(): Promise<void> {
     await apiClient.post("/auth/logout");
   },
-  async updateMe(payload: { full_name: string }): Promise<User> {
-    const { data } = await apiClient.patch<User>("/auth/me", payload);
+  async updateMe(payload: { full_name: string }, accountId: number): Promise<User> {
+    const { data } = await apiClient.patch<User>("/auth/me", payload, { headers: { "X-Account-ID": String(accountId) } });
     return data;
   },
-  async changePassword(payload: { current_password: string; new_password: string }): Promise<void> {
-    await apiClient.post("/auth/password", payload);
+  async changePassword(payload: { current_password: string; new_password: string }, accountId: number): Promise<void> {
+    await apiClient.post("/auth/password", payload, { headers: { "X-Account-ID": String(accountId) } });
   },
   async me(): Promise<User> {
     const { data } = await apiClient.get<User>("/auth/me");

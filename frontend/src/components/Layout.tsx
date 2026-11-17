@@ -16,7 +16,7 @@ export function Layout() {
     try { return localStorage.getItem("collection.sidebar.collapsed") === "true"; } catch { return false; }
   });
   const [mobileOpen, setMobileOpen] = useState(false);
-  const isAdmin = ["admin", "reviewer"].includes(user?.role ?? "");
+  const isAdmin = user?.operations === true || user?.role === "admin";
 
   const title = pageTitle(pathname);
 

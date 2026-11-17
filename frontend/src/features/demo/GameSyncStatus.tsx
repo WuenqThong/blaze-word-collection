@@ -8,7 +8,7 @@ export function GameSyncStatus({ session }: { session: Session }) {
   if (!live) return null;
   if (!session.serverRevision) return <p className="demo-note">Lượt cũ này chỉ có bản đầy đủ trên thiết bị hiện tại. <Link to="/demo/play">Mở lượt mới</Link> để lưu và tiếp tục trên thiết bị khác.</p>;
   const pending = session.serverPending?.length ?? 0;
-  if (!session.serverSyncError && !session.serverConflict && !session.localBackups?.length) return null;
+  if (!session.serverSyncError && !session.serverConflict && !session.localBackups?.length) return <p className="demo-note" role="status">{pending > 0 ? "Đã lưu nháp trên thiết bị · đang chờ máy chủ xác nhận." : "Đã lưu trên máy chủ."}</p>;
   return <section className="game-sync-status" aria-label="Trạng thái lưu lượt chơi">
     {session.serverSyncError && <p role="alert">{session.serverSyncError}</p>}
     {!session.serverConflict && <Action onClick={refresh}>{pending > 0 ? "Thử đồng bộ lại" : "Tải lại"}</Action>}

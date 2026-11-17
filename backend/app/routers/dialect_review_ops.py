@@ -4,7 +4,6 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.audit import request_id_context
@@ -13,7 +12,9 @@ from app.models.dialect import DialectContribution as C, DialectContributionMeta
 from app.models.dialect import DialectParticipant as DP, DialectVote as V
 from app.models.security import SecurityAuditEvent
 from app.models.user import User
-from app.routers.dialect import consent_of, event, reviewer
+from app.routers.dialect import event, reviewer
+from app.services.collection_consent import contribution_write, lock_contributions, require_collection_consent
+from app.services.review_binding import bound_votes
 
 router = APIRouter(prefix="/dialect", tags=["dialect-review-ops"])
 
@@ -49,22 +50,17 @@ class BulkReviewInput(BaseModel):
 
 @router.post("/reviews/bulk")
 def bulk_review(body: BulkReviewInput, db: Session = Depends(get_db), user: User = Depends(reviewer)):
-    try:
-        # SQLite's write reservation serializes validation with concurrent votes/withdrawals.
-        # Other databases lock all target rows until this transaction commits.
-        if db.bind.dialect.name == "sqlite":
-            db.execute(text("BEGIN IMMEDIATE"))
-        items = db.query(C).filter(C.id.in_(body.ids)).order_by(C.id).with_for_update().all()
+    with contribution_write(db):
+        items = lock_contributions(db, body.ids)
         if len(items) != len(body.ids):
             raise HTTPException(404, "Có mẫu không tồn tại; chưa thay đổi mẫu nào")
         for item in items:
             enforce_region(db, user, item)
+            require_collection_consent(db, item)
             meta = db.get(M, item.id)
             votes = db.query(V).filter_by(contribution_id=item.id).all()
             if item.withdrawn_at or (meta and meta.duplicate_of) or db.query(C).filter(C.parent_id == item.id, C.withdrawn_at.is_(None)).first():
                 raise HTTPException(409, "Mẫu đã rút, bị trùng hoặc có phiên bản mới")
-            if not consent_of(item, meta).get("collect"):
-                raise HTTPException(409, "Mẫu không còn quyền tiếp nhận")
             if body.action == "REQUEUE":
                 # Only suspect/operational HOLD without votes: reopening a reviewed decision
                 # would reuse old votes and violate the two-independent-reviewer SOP.
@@ -76,7 +72,7 @@ def bulk_review(body: BulkReviewInput, db: Session = Depends(get_db), user: User
             else:
                 if user.role not in ('admin', 'reviewer') or any(v.reviewer_id == user.id for v in votes):
                     raise HTTPException(403, "Từ chối hàng loạt cần quản trị viên độc lập")
-                if item.status != "REVIEW" or len({v.reviewer_id for v in votes}) < 2:
+                if item.status != "REVIEW" or len({v.reviewer_id for v in bound_votes(db, item)}) < 2:
                     raise HTTPException(409, "Cần ít nhất hai phiếu độc lập trước khi từ chối")
         request_id = request_id_context.get() or uuid4().hex
         for item in items:
@@ -88,6 +84,3 @@ def bulk_review(body: BulkReviewInput, db: Session = Depends(get_db), user: User
                 details={"before": before, "after": item.status, "batch_size": len(items)}))
         db.commit()
         return {"updated": len(items), "ids": [item.id for item in items], "action": body.action}
-    except Exception:
-        db.rollback()
-        raise

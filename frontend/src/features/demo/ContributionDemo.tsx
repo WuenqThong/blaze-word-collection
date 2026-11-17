@@ -11,6 +11,7 @@ import { repository } from "./repository";
 import type { Consent, Raw, Session } from "./types";
 import { isTestSession } from "./testSessions";
 import { MyContributions } from "./MyContributions";
+import { SyncItem } from "./SyncStatus";
 import { useBlurValidation } from "../auth/useBlurValidation";
 import { Modal } from "react-bootstrap";
 
@@ -261,12 +262,14 @@ function ContributionForm({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(0);
+  const [draftError, setDraftError] = useState("");
   const requiredLabels = { text: "cách nói địa phương", meaning: "nghĩa của cách nói", standard: "cách nói phổ thông", context: "một ví dụ sử dụng", evidence: "nguồn hoặc nơi bạn nghe cách nói", region: "vùng bạn nghe cách nói" };
   const validation = useBlurValidation(Object.fromEntries(Object.entries(requiredLabels).map(([key, label]) => [key, () => raw.response !== "answer" || raw[key as keyof typeof requiredLabels].trim() ? "" : `Nhập ${label}.`])));
   function save(r: Raw, c: Consent) {
     setSaving((n) => n + 1);
     void run({ type: "draft", key: draftKey, raw: r, consent: c, parent })
-      .catch(() => {})
+      .then(() => setDraftError(""))
+      .catch(() => setDraftError("Chưa lưu được nháp. Giữ trang này và thử lại."))
       .finally(() => setSaving((n) => n - 1));
   }
   function update<K extends keyof Raw>(key: K, value: Raw[K]) {
@@ -286,10 +289,24 @@ function ContributionForm({
     window.addEventListener("beforeunload", f);
     return () => window.removeEventListener("beforeunload", f);
   }, [saving, sent]);
+  function textField([k, label]: readonly ["text" | "meaning" | "standard" | "context" | "evidence" | "partOfSpeech" | "variants" | "keywords" | "family", string]) {
+    const required = ["text", "meaning", "standard", "context", "evidence"].includes(k) && raw.response === "answer";
+    return <Field key={k} label={label + (required ? " *" : "")}>
+      <textarea name={k} rows={k === "context" ? 3 : 2} required={required} value={raw[k]} maxLength={5000}
+        placeholder={k === "evidence" ? "Ví dụ: gia đình ở Hội An, sách hoặc đường dẫn nguồn." : undefined}
+        onBlur={() => { if (k in requiredLabels) validation.blur(k); }}
+        aria-invalid={!!validation.errors[k]} aria-describedby={validation.errors[k] ? `direct-${k}-error` : undefined}
+        onChange={(e) => update(k, e.target.value)} />
+      {validation.errors[k] && <span className="bz-field-error" id={`direct-${k}-error`} role="alert">{validation.errors[k]}</span>}
+    </Field>;
+  }
+  const sentItem = state.contributions.find(c => c.id === id || c.clientRef === id);
+  const accepted = !live || !!sentItem && (sentItem.id.startsWith("c:") || sentItem.sync?.status === "accepted");
   if (sent)
     return (
-      <Panel title={live ? "Đã tiếp nhận bản gốc" : "Đã tiếp nhận bản gốc Minh họa"}>
-        <p>Mã: {id}. Chưa tự xác minh hoặc cấp lượt sử dụng.</p>
+      <Panel title={live ? accepted ? "Đã gửi" : "Chưa gửi được" : "Đã lưu minh họa"}>
+        <p>{accepted ? "Đóng góp đang chờ duyệt." : "Nội dung vẫn được giữ trên máy."}</p>
+        {live && !accepted && sentItem && <SyncItem c={sentItem} />}
         <Link className="btn btn-primary" to="/demo/history">
           Xem đóng góp của tôi
         </Link>
@@ -308,11 +325,11 @@ function ContributionForm({
         }
       >
         <p>
-          Giữ Bản gốc, khai nguồn và chọn quyền sử dụng. Nháp giữ trong kho minh họa
-          riêng.
+          {live ? "Góp cách nói bạn biết, kèm nguồn và vùng sử dụng." : "Nháp minh họa được giữ riêng trên trình duyệt."}
         </p>
       </Heading>
       <Panel>
+        {draftError && <p role="alert" className="demo-error">{draftError}</p>}
         {task && (
           <>
             <p className="demo-question-text">{task.prompt}</p>
@@ -361,55 +378,14 @@ function ContributionForm({
             </Field>
           )}
           <div className="demo-form-grid">
-            {(
-              [
-                ["text", kind === "word" ? "Từ / cụm từ" : "Câu phương ngữ"],
-                ["meaning", "Nghĩa"],
-                ["standard", "Cách nói phổ thông"],
-                ["context", "Câu ví dụ / ngữ cảnh"],
-                ["evidence", "Nguồn / chứng cứ"],
-                ["partOfSpeech", "Từ loại"],
-                ["variants", "Biến thể"],
-                ["keywords", "Từ khóa"],
-                ["family", "Họ câu / nhóm liên quan"],
-              ] as const
-            ).map(([k, label]) => (
-              <Field
-                key={k}
-                label={
-                  label +
-                  ([
-                    "text",
-                    "meaning",
-                    "standard",
-                    "context",
-                    "evidence",
-                  ].includes(k) && raw.response === "answer"
-                    ? " *"
-                    : "")
-                }
-              >
-                <textarea
-                  name={k}
-                  rows={k === "context" ? 3 : 2}
-                  required={
-                    [
-                      "text",
-                      "meaning",
-                      "standard",
-                      "context",
-                      "evidence",
-                    ].includes(k) && raw.response === "answer"
-                  }
-                  value={raw[k]}
-                  maxLength={5000}
-                  onBlur={() => { if (k in requiredLabels) validation.blur(k); }}
-                  aria-invalid={!!validation.errors[k]} aria-describedby={validation.errors[k] ? `direct-${k}-error` : undefined}
-                  onChange={(e) => update(k, e.target.value)}
-                />
-                {validation.errors[k] && <span className="bz-field-error" id={`direct-${k}-error`} role="alert">{validation.errors[k]}</span>}
-              </Field>
-            ))}
+            {([
+              ["text", kind === "word" ? "Từ / cụm từ" : "Câu phương ngữ"],
+              ["meaning", "Nghĩa"], ["standard", "Cách nói phổ thông"],
+              ["context", "Câu ví dụ / ngữ cảnh"], ["evidence", "Nguồn / chứng cứ"],
+            ] as const).map(textField)}
+            <details className="direct-extra-fields"><summary>Thông tin thêm · tùy chọn</summary>
+              {([["partOfSpeech", "Từ loại"], ["variants", "Biến thể"], ["keywords", "Từ khóa"], ["family", "Họ câu / nhóm liên quan"]] as const).map(textField)}
+            </details>
             <Field label="Vùng dùng *">
               <select
                 name="region" value={raw.region} required

@@ -12,7 +12,9 @@ import { questionErrors, shuffleOptions } from "./questionFormats";
 import { isTestSession } from "./testSessions";
 import { localQualityReasons } from "./contributionQuality";
 import { answerOriginal, isOpenQuestion } from "./dialectOriginal";
+import { reviewContentKey, reviewDigest, REVIEW_FIELDS } from "./reviewVersion";
 import { REGION_CHOICES } from "./regions";
+import { playerQuestionAllowed } from "./playerContent";
 export const uid = () => crypto.randomUUID();
 const hash = (s: string) => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return h >>> 0; };
 export const normalize = (s: string) =>
@@ -246,25 +248,7 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
       note,
       at: now,
     });
-  if (s.simulate === "offline" && !["simulate", "actor"].includes(command.type))
-    throw Error(
-      "Mô phỏng mất mạng: chưa lưu. Tắt lỗi rồi thử lại; dữ liệu đã lưu trước đó được giữ.",
-    );
-  if (
-    s.simulate === "spam" &&
-    ["start", "submit", "contribute"].includes(command.type)
-  )
-    throw Error(
-      "Mô phỏng giới hạn lượt: tạm giữ yêu cầu. Hãy tắt kịch bản spam để thử lại.",
-    );
   switch (command.type) {
-    case "actor":
-      assert(
-        s.people.some((p) => p.id === command.id),
-        "Vai trò không tồn tại.",
-      );
-      s.actor = command.id;
-      break;
     case "register": {
       assert(command.name.trim(), "Cần tên hiển thị minh họa.");
       const id = uid();
@@ -302,9 +286,6 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
       s.models.push(command.model);
       audit("MODEL_VERSION", command.model.id, command.model.notes);
       break;
-    case "simulate":
-      s.simulate = command.value;
-      break;
     case "autoStart":
     case "start": {
       if (s.sessions.some((x) => x.id === command.id)) break;
@@ -331,6 +312,7 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
           ? 2
           : 1;
       const used = new Set<string>();
+      const allowed = new Set(s.questions.filter(playerQuestionAllowed).map(q => q.id));
       const ids = e!.questionIds.map((id) => {
         const original = s.questions.find((q) => q.id === id)!;
         let q = original;
@@ -341,6 +323,7 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
               x.region === e!.region &&
               x.approval !== "DRAFT" &&
               x.demo === e!.demo &&
+              allowed.has(x.id) &&
               !used.has(x.id),
           );
           pool.sort(
@@ -365,6 +348,7 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
               x.provenance?.verification === "sourced" &&
               x.approval !== "DRAFT" &&
               x.demo === e!.demo &&
+              allowed.has(x.id) &&
               !used.has(x.id) &&
               !questionErrors(x).length,
           );
@@ -379,6 +363,16 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
             ...pool.slice(0, history.length % pool.length),
           ];
           q = rotated.find((x) => !used.has(x.id)) ?? original;
+        }
+        if (!allowed.has(q.id) || used.has(q.id)) {
+          const replacements = s.questions.filter(candidate =>
+            candidate.kind === original.kind && candidate.format === original.format &&
+            candidate.region === original.region && candidate.demo === original.demo &&
+            candidate.sourceId === original.sourceId && candidate.approval !== "DRAFT" &&
+            allowed.has(candidate.id) && !used.has(candidate.id) && !questionErrors(candidate).length);
+          replacements.sort((a, b) => hash(command.id + a.id) - hash(command.id + b.id));
+          assert(replacements.length > 0, "Chưa có đủ câu hỏi phù hợp để mở lượt chơi. Vui lòng thử lại sau.");
+          q = replacements[0];
         }
         used.add(q.id);
         return q.id;
@@ -682,6 +676,8 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
     case "vote": {
       review();
       const c = contribution(command.id);
+      assert(command.expectedDigest === undefined || command.expectedDigest === reviewDigest(c), "Phiên bản đã thay đổi. Tải lại nội dung và đánh giá lại.");
+      assert(c.consent.collect === true, "Mẫu không còn quyền tiếp nhận; chỉ được xem lịch sử.");
       assert(s.votes.filter(v => v.contributionId === c.id).length < 2, "Đã đủ hai phiếu; cần phân xử nếu bất đồng.");
       assert(!c.duplicateOf, "Mẫu trùng không thuộc hàng chờ duyệt mới.");
       assert(c.owner !== actor.id, "Không tự duyệt.");
@@ -725,6 +721,8 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
     case "decide": {
       admin();
       const c = contribution(command.id);
+      assert(command.expectedDigest === undefined || command.expectedDigest === reviewDigest(c), "Phiên bản đã thay đổi. Tải lại nội dung và đánh giá lại.");
+      assert(c.consent.collect === true, "Mẫu không còn quyền tiếp nhận; chỉ được xem lịch sử.");
       const votes = s.votes.filter((v) => v.contributionId === c.id);
       assert(
         c.owner !== actor.id && !votes.some((v) => v.reviewer === actor.id),
@@ -742,13 +740,26 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
     case "curate": {
       review();
       const c = contribution(command.id);
+      assert(command.expectedDigest === undefined || command.expectedDigest === reviewDigest(c), "Phiên bản đã thay đổi. Tải lại nội dung và đánh giá lại.");
+      assert(c.consent.collect === true, "Mẫu không còn quyền tiếp nhận; chỉ được xem lịch sử.");
       assert(
         c.status === "VERIFIED" && !c.withdrawn,
         "Chuẩn hóa sau khi xác minh.",
       );
-      c.curated = command.raw;
-      c.senseId = command.senseId;
+      const changed = reviewContentKey(c.curated ?? c.raw, c.senseId ?? c.id, c.qaAudio) !== reviewContentKey(command.raw, command.senseId || c.id, command.qaAudio);
+      if (changed) {
+        c.reviewHistory ??= [];
+        c.reviewHistory.push({ revision: c.reviewRevision ?? 1, digest: reviewDigest(c),
+          content: structuredClone(c.curated ?? c.raw), senseId: c.senseId, qaAudio: c.qaAudio, status: c.status,
+          votes: s.votes.filter(v => v.contributionId === c.id), archivedAt: now });
+        s.votes = s.votes.filter(v => v.contributionId !== c.id);
+        c.reviewRevision = (c.reviewRevision ?? 1) + 1;
+        c.status = "RAW";
+      }
+      c.curated = { ...c.raw, ...Object.fromEntries(REVIEW_FIELDS.map(key => [key, command.raw[key].normalize("NFC").trim().replace(/\s+/gu, " ")])) };
+      c.senseId = (command.senseId || c.id).normalize("NFC").trim().replace(/\s+/gu, " ");
       c.qaAudio = command.qaAudio;
+      if (changed) { delete c.reviewDigest; c.reviewDigest = reviewDigest(c); }
       audit("CURATE", c.id, "Lưu bản chuẩn hóa; không sửa Bản gốc.");
       break;
     }

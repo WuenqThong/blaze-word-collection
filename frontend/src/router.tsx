@@ -7,7 +7,6 @@ import { RegisterPage } from "./features/auth/RegisterPage";
 import { ResetPasswordPage } from "./features/auth/ResetPasswordPage";
 
 import { PublicLayout, LandingPage, AboutDataPage } from "./features/dialect/PublicPages";
-import { ContributionWizard } from "./features/dialect/ContributionWizard";
 import { ContributionsPage, ContributionDetailPage, DialectProfilePage } from "./features/dialect/ContributionPages";
 import { DialectDashboard, DialectReviewPage, SourcesPage, DatasetsPage, ParticipantsPage, LegacyPage } from "./features/dialect/AdminPages";
 import { ErrorPage } from "./pages/ErrorPage";
@@ -16,6 +15,7 @@ import { AuthProvider } from "./features/auth/AuthProvider";
 import { demoRoute } from "./features/demo/routes";
 import { pilotRoutes } from "./lib/pilotRoutes";
 import { ApplicationError } from "./components/ApplicationError";
+import { ContributionEntry } from "./features/dialect/ContributionEntry";
 export const router = createBrowserRouter(pilotRoutes([
   // Auth pages full-screen, không dùng Layout
   { path: "/login", element: <AuthProvider><LoginPage /></AuthProvider> },
@@ -39,8 +39,8 @@ export const router = createBrowserRouter(pilotRoutes([
           { path: "legacy/audio", lazy: async () => ({Component:(await import("./pages/DashboardPage")).DashboardPage}) },
           { path: "legacy", element: <LegacyPage /> },
           { path: "legacy/settings", lazy: async () => ({Component:(await import("./pages/SettingsPage")).SettingsPage}) },
-          { path: "contribute", element: <Navigate to="/contribute/new" replace /> },
-          { path: "contribute/new", element: <ContributionWizard /> },
+          { path: "contribute", element: <ContributionEntry /> },
+          { path: "contribute/new", element: <ContributionEntry /> },
           { path: "my/contributions", element: <ContributionsPage /> },
           { path: "my/contributions/:id", element: <ContributionDetailPage /> },
           { element: <ReviewerRoute />, children: [{path:"review",element:<DialectReviewPage/>}] },

@@ -51,6 +51,9 @@ def get_current_user(request: Request, response: Response, db: Session = Depends
         raise HTTPException(status_code=401, detail="Phiên đã hết hiệu lực. Vui lòng đăng nhập lại.")
     if user.account_status == 'suspended':
         raise HTTPException(status_code=403, detail="Tài khoản đang bị tạm dừng")
+    expected_account = request.headers.get('X-Account-ID')
+    if expected_account is not None and expected_account != str(user.id):
+        raise HTTPException(409, 'Phiên tài khoản đã thay đổi. Tải lại trang trước khi lưu.')
     db.info['actor_id'] = user.id
 
     # Sliding session: once half the lifetime has passed, any authenticated request

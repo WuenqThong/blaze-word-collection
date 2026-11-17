@@ -18,7 +18,8 @@ from uuid import uuid4
 
 
 def issue_recovery(db, issuer: User, target: User) -> str:
-    if issuer.role not in ('admin', 'reviewer') or issuer.account_status != 'active':
+    from app.services.staff_access import can_operate
+    if not can_operate(db, issuer) or issuer.account_status != 'active':
         raise HTTPException(403, 'Chỉ quản trị viên đang hoạt động được cấp liên kết khôi phục')
     token = secrets.token_urlsafe(32)
     now = utcnow()

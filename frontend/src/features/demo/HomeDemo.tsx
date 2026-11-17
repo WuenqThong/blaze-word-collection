@@ -3,55 +3,36 @@ import { Heading, Panel } from "./ui";
 import { SERVER_ENABLED } from "./server";
 export function HomeDemo() {
   return (
-    <>
-      <section className="demo-home-hero">
-        <div>
-          <h1>
-            Tiếng quê mình,
-            <br />
-            <span>chơi để cùng góp.</span>
-          </h1>
-          <p>
-            Chơi 10 câu hỏi hoặc góp trực tiếp một cách nói bạn biết.
-          </p>
-          <div className="demo-actions">
-            <Link className="btn btn-primary" to="/demo/play">
-              Chơi trò chơi 10 câu{" "}
-              <i className="bi bi-arrow-right" aria-hidden="true" />
-            </Link>
-            <Link className="btn btn-outline-primary" to="/demo/contribute">Góp trực tiếp</Link>
-          </div>
-        </div>
-        <Panel title="10 câu, nhiều cách đóng góp">
-          <ol className="demo-home-steps">
-            <li>
-              <strong>01</strong>
-              <span>
-                Trả lời câu hỏi
-                <br />
-                <small>Cách nói phổ thông bạn biết.</small>
-              </span>
-            </li>
-            <li>
-              <strong>02</strong>
-              <span>
-                Giải thích cách dùng
-                <br />
-                <small>Nêu nghĩa hoặc ví dụ.</small>
-              </span>
-            </li>
-            <li>
-              <strong>03</strong>
-              <span>
-                Gửi đóng góp
-                <br />
-                <small>Người duyệt sẽ kiểm tra.</small>
-              </span>
-            </li>
-          </ol>
-        </Panel>
+    <div className="community-home">
+      <section className="community-intro" aria-labelledby="community-title">
+        <p className="community-eyebrow">XÂY DỰNG DỮ LIỆU DỊCH PHƯƠNG NGỮ</p>
+        <h1 id="community-title">Chia sẻ cách nói địa phương.<br /><span>Giúp bản dịch hiểu đúng hơn.</span></h1>
+        <p className="community-lead">Đóng góp từ, câu địa phương cùng ý nghĩa bằng tiếng Việt phổ thông. Dữ liệu sau khi được kiểm duyệt và có sự đồng ý của bạn sẽ được dùng để huấn luyện, cải thiện hệ thống dịch phương ngữ.</p>
       </section>
-    </>
+      <section className="community-paths" aria-label="Chọn cách đóng góp">
+        <article className="community-path community-path-primary">
+          <span className="community-path-icon" aria-hidden="true"><i className="bi bi-chat-square-text" /></span>
+          <p className="community-eyebrow">KHÁM PHÁ & ĐÓNG GÓP</p>
+          <h2>Đóng góp qua 10 câu hỏi</h2>
+          <p>Giải thích nghĩa của cách nói địa phương qua một lượt chơi 10 câu. Câu trả lời của bạn giúp bổ sung và kiểm tra dữ liệu dịch.</p>
+          <Link className="btn btn-primary" to="/demo/play">Chơi trò chơi 10 câu <i className="bi bi-arrow-right" aria-hidden="true" /></Link>
+          <small>Bạn có thể xem lại trước khi gửi.</small>
+        </article>
+        <article className="community-path">
+          <span className="community-path-icon" aria-hidden="true"><i className="bi bi-pencil-square" /></span>
+          <p className="community-eyebrow">CHIA SẺ ĐIỀU BẠN BIẾT</p>
+          <h2>Đóng góp từ, câu địa phương</h2>
+          <p>Viết một từ hoặc câu thường dùng ở quê bạn, giải thích nghĩa và cách nói tương ứng bằng tiếng Việt phổ thông.</p>
+          <Link className="btn btn-outline-primary" to="/demo/contribute">Đóng góp từ, câu <i className="bi bi-arrow-right" aria-hidden="true" /></Link>
+          <small>Ví dụ: “mô” nghĩa là “đâu”, thường dùng ở miền Trung.</small>
+        </article>
+      </section>
+      <section className="community-assurance" aria-label="Đóng góp của bạn được trân trọng">
+        <div><i className="bi bi-person-check" aria-hidden="true" /><h2>Không cần là chuyên gia</h2><p>Chia sẻ từ, câu bạn biết, ý nghĩa và vùng thường sử dụng.</p></div>
+        <div><i className="bi bi-check2-circle" aria-hidden="true" /><h2>Có người đọc và kiểm tra</h2><p>Người kiểm duyệt kiểm tra ý nghĩa và cách dùng trước khi đưa vào bộ dữ liệu dịch.</p></div>
+        <div><i className="bi bi-shield-check" aria-hidden="true" /><h2>Bạn quyết định quyền sử dụng</h2><p>Đọc phạm vi đồng ý và quản lý đóng góp trong lịch sử.</p><Link to="/demo/rights">Tìm hiểu quyền của bạn <span aria-hidden="true">→</span></Link></div>
+      </section>
+    </div>
   );
 }
 export function RightsDemo() {

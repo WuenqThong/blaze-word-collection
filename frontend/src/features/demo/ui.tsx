@@ -130,7 +130,7 @@ export function DemoGuard({
 }) {
   const { state, live } = useDemo();
   const actor = state.people.find((p) => p.id === state.actor)!;
-  if (["admin", "reviewer"].includes(actor.role) || (review && actor.role === "reviewer")) return <>{children}</>;
+  if (["admin", "reviewer"].includes(actor.role) && (review || !live || actor.operations === true || actor.role === "admin")) return <>{children}</>;
   if (live)
     return (
       <Panel title="Tài khoản chưa có quyền này">

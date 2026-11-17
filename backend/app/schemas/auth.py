@@ -17,6 +17,7 @@ class LoginRequest(BaseModel):
 
 
 class UserPublic(BaseModel):
+    operations: bool = False
     id: int
     email: EmailStr
     full_name: str
