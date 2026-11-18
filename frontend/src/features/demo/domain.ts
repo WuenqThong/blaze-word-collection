@@ -132,7 +132,7 @@ export function eligible(s: DemoState, c: Contribution) {
     c.consent.train &&
     source?.train === true &&
     (!audio || (c.consent.audio && source.audio && c.qaAudio === "pass")) &&
-    s.votes.filter((v) => v.contributionId === c.id).length >= 2 &&
+    s.votes.filter((v) => v.contributionId === c.id).length >= 1 &&
     !s.contributions.some(
       (x) => x.parent === c.id && x.status === "VERIFIED" && !x.withdrawn,
     )
@@ -168,7 +168,7 @@ export function exclusionReasons(s: DemoState, c: Contribution) {
     !s.sources.find((x) => x.id === c.sourceId)?.train
       ? "Thiếu quyền nguồn"
       : null,
-    s.votes.filter((v) => v.contributionId === c.id).length < 2
+    s.votes.filter((v) => v.contributionId === c.id).length < 1
       ? "Thiếu phiếu"
       : null,
     s.contributions.some(
@@ -678,7 +678,7 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
       const c = contribution(command.id);
       assert(command.expectedDigest === undefined || command.expectedDigest === reviewDigest(c), "Phiên bản đã thay đổi. Tải lại nội dung và đánh giá lại.");
       assert(c.consent.collect === true, "Mẫu không còn quyền tiếp nhận; chỉ được xem lịch sử.");
-      assert(s.votes.filter(v => v.contributionId === c.id).length < 2, "Đã đủ hai phiếu; cần phân xử nếu bất đồng.");
+      assert(s.votes.filter(v => v.contributionId === c.id).length < 1, "Đã đủ một phiếu; cần phân xử nếu bất đồng.");
       assert(!c.duplicateOf, "Mẫu trùng không thuộc hàng chờ duyệt mới.");
       assert(c.owner !== actor.id, "Không tự duyệt.");
       assert(
@@ -712,7 +712,7 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
       });
       const votes = s.votes.filter((v) => v.contributionId === c.id);
       c.status =
-        votes.length >= 2 && new Set(votes.map((v) => v.verdict)).size === 1
+        votes.length >= 1 && new Set(votes.map((v) => v.verdict)).size === 1
           ? votes[0].verdict
           : "REVIEW";
       audit("VOTE", c.id, "Đã lưu phiếu độc lập.");
@@ -729,8 +729,8 @@ export function applyCommand(input: DemoState, command: Command): DemoState {
         "Điều phối viên phải độc lập.",
       );
       assert(
-        c.status === "REVIEW" && !c.withdrawn && votes.length >= 2,
-        "Cần ít nhất hai phiếu và bất đồng.",
+        c.status === "REVIEW" && !c.withdrawn && votes.length >= 1,
+        "Cần ít nhất một phiếu và bất đồng.",
       );
       assert(command.note.trim(), "Cần lý do.");
       c.status = command.verdict;

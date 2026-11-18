@@ -2,9 +2,8 @@ import type { Role } from "./types";
 
 interface AdminGroup { label: string; links: [string, string][]; more: [string, string][] }
 export const adminGroups: AdminGroup[] = [
-  { label: "Duyệt", links: [["/demo/reviewer/review", "Duyệt"]], more: [] },
-  { label: "Dữ liệu", links: [["/demo/reviewer/datasets", "Xuất"], ["/demo/reviewer/import", "Nhập"], ["/demo/reviewer/settings?section=sources", "Nguồn"]], more: [] },
-  { label: "Cài đặt", links: [["/demo/reviewer/settings", "Người dùng"], ["/demo/reviewer/exams", "Bộ đề"]], more: [["/demo/reviewer/questions", "Câu hỏi"], ["/demo/reviewer/sessions", "Lượt chơi"], ["/demo/campaigns", "Chiến dịch"], ["/demo/reviewer/operations", "Số liệu"]] },
+  { label: "Duyệt mẫu", links: [["/demo/reviewer/review", "Duyệt mẫu"]], more: [] },
+  { label: "Xuất dữ liệu", links: [["/demo/reviewer/datasets", "Bản xuất"], ["/demo/reviewer/settings?section=sources", "Nguồn sử dụng"]], more: [] },
 ];
 
 export function adminGroupFor(path: string, search = "") {
@@ -23,7 +22,11 @@ export function navigationFor(role: Role, operations = true): string[][] {
 // Frontend demo scope only. Real identity and data authorization belong on the API.
 export function routeAllowed(role: Role, path: string, operations = true): boolean {
   if (path === "/demo/account") return true;
-  if (["admin", "reviewer"].includes(role) && (operations || ["/demo/reviewer/review", "/demo/admin/review"].includes(path))) return true;
+  if (["admin", "reviewer"].includes(role)) {
+    const canonical = workspacePath(path);
+    if (canonical === "/demo/reviewer/review") return true;
+    return operations && ["/demo/reviewer/datasets", "/demo/reviewer/settings"].includes(canonical);
+  }
   if (role === "contributor" && path === "/demo/contribute") return true;
   return ["/demo", "/demo/play", "/demo/rights", "/demo/history"].includes(path) || /^\/demo\/game\/[^/]+$/.test(path);
 }

@@ -27,12 +27,9 @@ Blaze Cabin.app/
 # Private design sources: keep on this computer only.
 /designs/
 
-# ML runtime artifacts (source and dependency locks remain tracked)
-ml/data/
-ml/datasets/
-ml/models/
-ml/runs/
-ml/cache/
+# Local-only deployment and ML workspaces.
+/deploy/
+/ml/
 
 # Local database journals and QA/browser state
 *.db-wal

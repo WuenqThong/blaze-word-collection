@@ -17,6 +17,8 @@ def include(name):
         return False
     if path.as_posix() == '.vscode/settings.json':
         return False
+    if path.parts and path.parts[0].casefold() in {'deploy', 'ml'}:
+        return False
     if any(part in {'.git', '.venv', 'node_modules', '__pycache__', 'dist',
                     '.claude', 'designs', 'backups', 'releases'} for part in path.parts):
         return False

@@ -431,3 +431,54 @@ input, select, textarea, progress { accent-color: var(--blaze-accent); }
   .game-question-form .demo-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
   .game-question-form .demo-actions .btn { padding-inline: 6px; }
 }
+
+/* Focused handoff workspace: one queue, one reading surface. */
+.review-workspace { max-width: 1160px; margin-inline: auto; }
+.review-workspace .demo-heading { margin-bottom: 16px; }
+.review-workspace .demo-review-grid { grid-template-columns: 290px minmax(0, 1fr); gap: 20px; align-items: start; }
+.review-workspace .review-queue-list { display: grid; gap: 8px; }
+.review-workspace .demo-queue-button { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 14px; border: 1px solid #e5ded2; border-radius: 10px; background: #fff; text-align: left; }
+.review-workspace .demo-queue-button strong { grid-column: 1 / -1; font-size: 16px; color: #302a23; }
+.review-workspace .demo-queue-button span { font-size: 13px; }
+.review-workspace .demo-queue-button[aria-pressed=true] { border-color: #a15c00; background: #fff6df; box-shadow: inset 3px 0 #a15c00; }
+.review-workspace .review-original { margin-block: 16px; padding: 18px; border-radius: 10px; background: #faf8f3; font-size: 24px; line-height: 1.4; }
+.review-workspace .demo-definition { gap: 12px 20px; margin-bottom: 20px; }
+.review-workspace .demo-definition dd { margin-top: 4px; line-height: 1.6; overflow-wrap: anywhere; }
+.review-workspace .review-reader > .demo-panel { box-shadow: none; border-color: #e5ded2; }
+.review-workspace .review-help { margin-top: 20px; font-size: 14px; }
+@media(max-width: 900px) {
+  .review-workspace .demo-review-grid { grid-template-columns: minmax(0, 1fr); }
+  .review-workspace .review-queue-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media(max-width: 480px) {
+  .review-workspace .review-queue-list { grid-template-columns: minmax(0, 1fr); }
+  .review-workspace .demo-queue-button { padding: 12px; }
+  .review-workspace .review-original { font-size: 21px; }
+}
+
+/* Queue cards stay fully visible; pagination replaces nested scrolling. */
+.demo-app .review-workspace .review-queue-list {
+  max-height: none; overflow: visible; scrollbar-gutter: auto;
+  padding: 0; display: grid; gap: 10px;
+}
+.demo-app .review-workspace .review-queue-list .demo-queue-button {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px;
+  width: 100%; min-width: 0; padding: 14px 16px; margin: 0;
+  border: 1px solid #e5ded2; border-radius: 10px; background: #fff;
+}
+.demo-app .review-workspace .review-queue-list .demo-queue-button strong {
+  display: block; grid-column: auto; font-size: 15px; line-height: 1.5;
+  overflow-wrap: anywhere; font-weight: 600;
+}
+.demo-app .review-workspace .review-queue-list .demo-queue-button .review-queue-region {
+  display: block; color: #665d51; font-size: 13px; line-height: 1.5;
+}
+.demo-app .review-workspace .review-queue-list .demo-queue-button .demo-status {
+  justify-self: start; width: auto; white-space: nowrap; padding: 4px 9px;
+  font-size: 12px; line-height: 1.5; border-radius: 6px;
+}
+.demo-app .review-workspace .review-queue-list .demo-queue-button:hover { border-color: #bd9d6d; background: #fffaf0; }
+.demo-app .review-workspace .review-queue-list .demo-queue-button[aria-pressed=true] {
+  border-color: #a15c00; background: #fff4d6; box-shadow: inset 3px 0 #a15c00;
+}
+.review-workspace .review-pagination { margin-top: 16px; padding-top: 16px; }

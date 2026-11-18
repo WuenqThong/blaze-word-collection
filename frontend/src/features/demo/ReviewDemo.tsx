@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { qualityReasonLabels } from "./contributionQuality";
-import { BulkReviewControls } from "../dialect/ReviewPage";
 import { useSearchParams } from "react-router-dom";
 import { useDemo } from "./context";
 import { blankRaw, consentDefault } from "./seed";
@@ -58,21 +57,20 @@ function ReviewInner() {
       !c.withdrawn &&
       !isTestContribution(state, c) &&
       !c.duplicateOf &&
-      (state.votes.some((v) => v.contributionId === c.id && v.reviewer === actor.id) === done) &&
+      (status === "VERIFIED" || state.votes.some((v) => v.contributionId === c.id && v.reviewer === actor.id) === done) &&
       c.owner !== actor.id &&
       (["admin", "reviewer"].includes(actor.role) || (c.curated ?? c.raw).region === actor.region) &&
       (done || !!status || ["RAW", "REVIEW", "HOLD"].includes(c.status)),
   );
   const items = available.filter(c => (!region || (c.curated ?? c.raw).region === region) && (!status || c.status === status));
-  const pages = Math.max(1, Math.ceil(items.length / 10));
+  const pages = Math.max(1, Math.ceil(items.length / 5));
   const currentPage = Math.min(page, pages);
-  const visibleItems = items.slice((currentPage - 1) * 10, currentPage * 10);
+  const visibleItems = items.slice((currentPage - 1) * 5, currentPage * 5);
   const item = state.contributions.find((c) => c.id === selected);
-  const feedback = state.feedback.filter(f => f.state === "open" && (["admin", "reviewer"].includes(actor.role) || items.some(c => c.id === f.entity)));
   const filtered = !!region || !!status;
   return (
     <div className="review-workspace">
-      <Heading title="Duyệt"><p>Mỗi mẫu cần 2 Reviewer độc lập.</p></Heading>
+      <Heading title="Duyệt"><p>Mỗi mẫu cần 1 Reviewer độc lập.</p></Heading>
       <div className="demo-actions"><Action current={!done} onClick={() => setParams({})}>Chờ duyệt</Action><Action current={done} onClick={() => setParams({ view: "done" })}>Đã xử lý</Action><Action onClick={refresh}>Tải lại</Action></div>
       {reloadError && <p role="alert">Không tải được dữ liệu. Bấm Tải lại.</p>}
       <div className="demo-filters review-filters">
@@ -122,7 +120,7 @@ function ReviewInner() {
             >
               <strong>{(c.curated ?? c.raw).text || c.raw.response}</strong>
               <small>Phiên bản {c.reviewRevision ?? 1}</small>
-              <span>
+              <span className="review-queue-region">
                 {(c.curated ?? c.raw).region || "Chưa ghi vùng"}
               </span>
               <span className={`demo-status status-${c.status.toLowerCase()}`}>{reviewLabels[c.status]}</span>
@@ -136,7 +134,7 @@ function ReviewInner() {
           )}
         </Panel>
         <div ref={reader} className="review-reader" tabIndex={-1} aria-label="Nội dung mẫu">{item ? (
-          <ReviewSnapshot key={`${item.id}.${state.actor}`} item={item} onCurated={(pending) => { setNotice(pending ? "Đã lưu bản mới. Cần hai người duyệt lại." : "Đã lưu chỉnh lý."); if (pending) setParams({}); }} onReviewed={() => { setSelected(""); setNotice("Đã gửi."); }} />
+          <ReviewSnapshot key={`${item.id}.${state.actor}`} item={item} onCurated={(pending) => { setNotice(pending ? "Đã lưu bản mới. Cần một người duyệt lại." : "Đã lưu chỉnh lý."); if (pending) setParams({}); }} onReviewed={() => { setSelected(""); setNotice("Đã gửi."); }} />
         ) : (
           <Panel title={items.length ? "Chọn mẫu" : "Nội dung"}>
             <div className="review-reader-empty"><i className="bi bi-file-earmark-text" aria-hidden="true" /><p>{items.length ? "Chọn một mẫu để bắt đầu." : "Chưa có mẫu."}</p></div>
@@ -147,33 +145,10 @@ function ReviewInner() {
         <p><strong>Đạt:</strong> bạn xác nhận được cả bốn tiêu chí về nghĩa, vùng sử dụng, ngữ cảnh và cách nói phổ thông.</p>
         <p><strong>Cần bổ sung:</strong> nội dung có thể dùng được nhưng thiếu thông tin để xác nhận. Ghi cụ thể phần cần bổ sung.</p>
         <p><strong>Không đạt:</strong> nội dung sai hoặc không phù hợp. Giải thích lý do để người góp hiểu.</p>
-        <p>Mỗi đóng góp cần hai người đánh giá độc lập. Bạn sẽ thấy đánh giá của người khác sau khi gửi đánh giá của mình. Khi hai người không thống nhất, Reviewer khác sẽ quyết định.</p>
+        <p>Mỗi mẫu chỉ cần một Reviewer kết luận. Không tự duyệt mẫu của mình. Nếu sửa nội dung, mẫu cần được duyệt lại.</p>
         <p>Nội dung gốc luôn được giữ nguyên. Bản chỉnh lý chỉ được lưu sau khi đóng góp đã được duyệt đạt.</p>
       </div></details>
-      {live && items.length > 0 && !done && <BulkReviewControls key={`${state.actor}.${region}.${status}.${currentPage}`} items={visibleItems.filter(c=>/^c:\d+$/.test(c.id)).map(c=>({id:Number(c.id.slice(2)),label:(c.curated ?? c.raw).text||c.raw.response}))} admin={["admin", "reviewer"].includes(actor.role)} reload={refresh}/>}
-      {feedback.length > 0 && <Panel title={`Phản hồi cần xử lý (${feedback.length})`}>
-        {feedback
-          .map((f) => (
-            <div className="demo-list-row" key={f.id}>
-              <p>
-                {f.entity} · {f.text}
-              </p>
-              <Action onClick={() => setSelected(f.entity)}>
-                Xem trong ngữ cảnh phía trên
-              </Action>
-              <ResolveFeedback id={f.id} />
-            </div>
-          ))}
-      </Panel>}
     </div>
-  );
-}
-function ResolveFeedback({ id }: { id: string }) {
-  const { run } = useDemo();
-  return (
-    <Action onClick={() => run({ type: "resolve", id })}>
-      Đã xử lý phản hồi
-    </Action>
   );
 }
 function OriginalDetails({ raw }: { raw: Raw }) {
@@ -250,9 +225,9 @@ function ReviewItem({ item: c, stale, canProcessLatest, onReviewed, onCurated }:
   const [openedVotes] = useState(() => state.votes.filter(v => v.contributionId === c.id));
   const votes = stale ? openedVotes : state.votes.filter((v) => v.contributionId === c.id);
   const voted = votes.some((v) => v.reviewer === actor.id);
-  const canSee = voted || (["admin", "reviewer"].includes(actor.role) && votes.length >= 2);
+  const canSee = voted || (["admin", "reviewer"].includes(actor.role) && votes.length >= 1);
   const canProcess = canProcessLatest && c.consent.collect === true && !c.withdrawn;
-  const canAct = canProcess && ["RAW", "REVIEW"].includes(c.status) && !voted && votes.length < 2 && c.owner !== actor.id;
+  const canAct = canProcess && ["RAW", "REVIEW"].includes(c.status) && !voted && votes.length < 1 && c.owner !== actor.id;
   function saveDraft(n: string, v: Vote["verdict"], cs: boolean[]) {
     void run({
       type: "draft",
@@ -293,7 +268,7 @@ function ReviewItem({ item: c, stale, canProcessLatest, onReviewed, onCurated }:
         <MediaPreview key={id} id={id} />
       ))}
       <p>
-        Đã có {votes.length} đánh giá. Cần ít nhất 2 người duyệt độc lập.
+        {votes.length ? "Đã có kết quả duyệt." : "Chưa được duyệt."}
       </p>
       {duplicates(state, c.raw, c.id).length > 0 && <p className="demo-note">Có {duplicates(state, c.raw, c.id).length} đóng góp tương tự. Hãy đọc kỹ ngữ cảnh để phân biệt.</p>}
       {c.parent && state.contributions.find((x) => x.id === c.parent) && (
@@ -305,9 +280,9 @@ function ReviewItem({ item: c, stale, canProcessLatest, onReviewed, onCurated }:
       )}
       {canSee && (
         <Panel title="Các đánh giá đã gửi">
-          {votes.map((v, i) => (
+          {votes.map((v) => (
             <p key={v.id}>
-              Đánh giá {i + 1}: {reviewLabels[v.verdict]} · {v.note}
+              Kết quả: {reviewLabels[v.verdict]} · {v.note}
             </p>
           ))}
         </Panel>
@@ -392,7 +367,7 @@ function ReviewItem({ item: c, stale, canProcessLatest, onReviewed, onCurated }:
       )}
       {canProcess && ["admin", "reviewer"].includes(actor.role) &&
         c.status === "REVIEW" &&
-        votes.length >= 2 &&
+        votes.length >= 1 &&
         new Set(votes.map((v) => v.verdict)).size > 1 && (
           <div>
             <Field label="Quyết định điều phối">
@@ -418,24 +393,10 @@ function ReviewItem({ item: c, stale, canProcessLatest, onReviewed, onCurated }:
             </Action>
           </div>
         )}
-      {canAct && <details className="review-follow-up"><summary>Gửi yêu cầu riêng cho người góp</summary><p className="review-hint">Dùng lý do đã nhập ở trên để gửi một phản hồi riêng. Thao tác này không thay thế việc gửi đánh giá.</p><div className="demo-actions">
-        <Action
-          disabled={!note.trim()}
-          onClick={() =>
-            run({
-              type: "feedback",
-              entity: c.id,
-              text: `Yêu cầu bổ sung: ${note}`,
-            })
-          }
-        >
-          Gửi yêu cầu bổ sung
-        </Action>
-      </div></details>}
       {canProcess && c.status === "VERIFIED" && (
         <div>
           <h3>Chỉnh lý nội dung đã duyệt</h3>
-          <p className="review-hint">Thay đổi nội dung sẽ mở phiên bản mới và cần hai người duyệt lại. Nội dung người góp gửi luôn được giữ nguyên.</p>
+          <p className="review-hint">Thay đổi nội dung sẽ mở phiên bản mới và cần một người duyệt lại. Nội dung người góp gửi luôn được giữ nguyên.</p>
           <form noValidate aria-busy={curateBusy} onSubmit={async e => {
             e.preventDefault();
             if (!curateValidation.validate(e)) return;

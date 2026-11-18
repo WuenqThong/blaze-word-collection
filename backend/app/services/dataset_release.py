@@ -44,7 +44,7 @@ def _valid(db, c):
         c.status == "VERIFIED" and not c.withdrawn_at and source and source.rights_confirmed
         and consent.get("collect") is True and consent.get("train") is True
         and consent.get("version") in CONSENT_VERSIONS
-        and len({v.reviewer_id for v in votes if v.reviewer_id != c.owner_id}) >= 2
+        and len({v.reviewer_id for v in votes if v.reviewer_id != c.owner_id}) >= 1
         and m and valid_curated(m.curated)
     )
 
@@ -124,7 +124,7 @@ def build_release(db, eligible_items, ids=None, client_splits=None, grouping_ite
     allowed, duplicates = release_candidates(db, items)
     selected = sorted(allowed if ids is None else set(ids))
     if not selected or any(cid not in allowed for cid in selected):
-        raise HTTPException(409, "Mẫu chưa đủ CURATED, hai reviewer độc lập hoặc quyền/consent; hãy tải lại.")
+        raise HTTPException(409, "Mẫu cần bản chỉnh lý đầy đủ, một phiếu duyệt hợp lệ và đủ quyền sử dụng; hãy tải lại.")
     universe = sorted(list(grouping_items if grouping_items is not None else items), key=lambda c: c.id)
     groups = _groups(db, universe)
     if any(c.id not in groups for c in items):

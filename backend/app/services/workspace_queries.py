@@ -15,7 +15,7 @@ DEFINITIONS = {
     'started_sessions': 'Lượt có xác nhận bắt đầu được máy chủ tiếp nhận; gồm cả lượt đã rút.',
     'submitted_sessions': 'Lượt có xác nhận gửi bài được máy chủ tiếp nhận; gồm cả lượt đã rút, kể cả lượt không sinh mẫu.',
     'withdrawn_sessions': 'Lượt đã xác nhận bắt đầu và sau đó được rút.',
-    'valid_samples': 'Mẫu VERIFIED, đủ hai phiếu, CURATED đầy đủ, không trùng/rút/thay thế và đủ quyền/consent huấn luyện.',
+    'valid_samples': 'Mẫu VERIFIED, đủ một phiếu, CURATED đầy đủ, không trùng/rút/thay thế và đủ quyền/consent huấn luyện.',
     'coverage': 'Không suy lượt từ số mẫu. Lượt mới có bản đề được chấm và kiểm tra trên máy chủ. Lượt cũ chỉ có xác nhận từ ứng dụng, không được coi là chứng nhận làm đúng đề. Lượt ngoại tuyến chưa đồng bộ chưa được tính.',
 }
 

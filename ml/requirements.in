@@ -1,8 +1,0 @@
-# Installed and frozen only after the environment smoke check succeeds.
-# Install torch separately from the official CUDA 12.6 wheel index.
-transformers
-datasets
-peft
-sentencepiece
-accelerate
-safetensors

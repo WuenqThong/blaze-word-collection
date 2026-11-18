@@ -312,7 +312,7 @@ def curate(cid: int, body: CurateInput, db: Session = Depends(get_db), user: Use
         # An unbound legacy CURATED round cannot be blessed by saving it again.
         valid_votes = bound_votes(db, item)
         unsafe = meta.curated is not None and (len(valid_votes) != db.query(V).filter_by(contribution_id=cid).count()
-                                              or (item.status == 'VERIFIED' and len(valid_votes) < 2))
+                                              or (item.status == 'VERIFIED' and len(valid_votes) < 1))
         if changed or unsafe:
             archive_current(db, item, user)
         elif meta.curated is None:
@@ -322,7 +322,7 @@ def curate(cid: int, body: CurateInput, db: Session = Depends(get_db), user: Use
         if changed or meta.curated is None:
             meta.curated, meta.sense_id, meta.qa_audio = curated, proposed.sense_id, body.qa_audio
         meta.curated_by, meta.curated_at = user.id, utcnow()
-        event(db, item, user, "CURATED", "Lưu bản chuẩn hóa; RAW giữ nguyên" + ('; cần hai phiếu mới' if changed or unsafe else ''))
+        event(db, item, user, "CURATED", "Lưu bản chuẩn hóa; RAW giữ nguyên" + ('; cần một phiếu mới' if changed or unsafe else ''))
         db.commit()
         return pack(item, db, user)
 

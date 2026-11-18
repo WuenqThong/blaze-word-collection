@@ -85,11 +85,11 @@ def pack(item, db, user, adjudication=False):
     meta = db.get(M, item.id)
     return {"id": item.id, "owner_id": item.owner_id, "parent_id": item.parent_id, "source_id": item.source_id,
             **binding(db, item), "review_history": history(db, item),
-            "review_required": item.status != 'VERIFIED' or len({v.reviewer_id for v in votes}) < 2,
+            "review_required": item.status != 'VERIFIED' or len({v.reviewer_id for v in votes}) < 1,
             "raw": item.raw, "status": item.status, "withdrawn_at": item.withdrawn_at, "created_at": item.created_at,
             "rights_confirmed": source.rights_confirmed, "rights_note": source.rights_note,
             "vote_count": len(votes), "has_voted": own_vote is not None,
-            "votes": [{"id": v.id, "reviewer_id": v.reviewer_id, "verdict": v.verdict, "rubric": v.rubric, "note": v.note, "created_at": v.created_at} for v in votes] if own_vote or (adjudication and user.role in ('admin', 'reviewer') and len(votes) >= 2) else [],
+            "votes": [{"id": v.id, "reviewer_id": v.reviewer_id, "verdict": v.verdict, "rubric": v.rubric, "note": v.note, "created_at": v.created_at} for v in votes] if own_vote or (adjudication and user.role in ('admin', 'reviewer') and len(votes) >= 1) else [],
             "events": [{"action": e.action, "note": e.note, "created_at": e.created_at} for e in db.query(E).filter_by(contribution_id=item.id).order_by(E.id).all()],
             "consent": consent_of(item, meta),
             "quality_reasons": quality_reasons(item.raw), "quality_policy": QUALITY_POLICY_VERSION,
@@ -371,8 +371,8 @@ def vote(cid: int, body: VoteInput, db: Session = Depends(get_db), user: User = 
             raise HTTPException(403, "Không được tự duyệt mẫu của mình")
         if item.withdrawn_at or item.status not in ("RAW", "REVIEW"):
             raise HTTPException(409, "Mẫu đã rút hoặc đã có quyết định; hãy tải lại")
-        if db.query(V).filter_by(contribution_id=cid).count() >= 2:
-            raise HTTPException(409, 'Đã đủ hai phiếu; cần phân xử nếu bất đồng')
+        if db.query(V).filter_by(contribution_id=cid).count() >= 1:
+            raise HTTPException(409, 'Đã đủ một phiếu; cần phân xử nếu bất đồng')
         meta = db.get(M, cid)
         if meta and meta.duplicate_of:
             raise HTTPException(409, "Mẫu trùng không thuộc hàng chờ duyệt mới")
@@ -388,10 +388,10 @@ def vote(cid: int, body: VoteInput, db: Session = Depends(get_db), user: User = 
             db.flush()
             votes = bound_votes(db, item)
             decisions = {v.verdict for v in votes}
-            item.status = next(iter(decisions)) if len(votes) >= 2 and len(decisions) == 1 else "REVIEW"
+            item.status = next(iter(decisions)) if len(votes) >= 1 and len(decisions) == 1 else "REVIEW"
             event(db, item, user, "REVIEWED", "Đã tiếp nhận một phiếu độc lập")
             if item.status != "REVIEW":
-                event(db, item, user, item.status, "Hai hoặc nhiều phiếu độc lập đồng thuận. " + " / ".join(v.note for v in votes))
+                event(db, item, user, item.status, "Reviewer đã kết luận.  " + " / ".join(v.note for v in votes))
             db.commit()
         except IntegrityError:
             db.rollback()
@@ -421,8 +421,8 @@ def finalize(cid: int, body: DecisionInput, db: Session = Depends(get_db), user:
         votes = bound_votes(db, item)
         if item.owner_id == user.id or any(v.reviewer_id == user.id for v in votes):
             raise HTTPException(403, "Điều phối viên phải độc lập với người góp và người đã bỏ phiếu")
-        if item.withdrawn_at or item.status != "REVIEW" or len(votes) < 2:
-            raise HTTPException(409, "Mẫu cần ít nhất hai phiếu và đang chờ điều phối")
+        if item.withdrawn_at or item.status != "REVIEW" or len(votes) < 1:
+            raise HTTPException(409, "Mẫu cần ít nhất một phiếu và đang chờ điều phối")
         item.status = body.verdict
         event(db, item, user, body.verdict, body.note)
         db.commit()
@@ -479,8 +479,8 @@ def exclusion_reasons(db, c, superseded):
         reasons.append("Đã rút mẫu")
     if c.status != "VERIFIED":
         reasons.append("Chưa xác minh nội dung")
-    if len({v.reviewer_id for v in bound_votes(db, c)}) < 2:
-        reasons.append("Chưa đủ hai phiếu")
+    if len({v.reviewer_id for v in bound_votes(db, c)}) < 1:
+        reasons.append("Chưa đủ một phiếu")
     if not db.get(S, c.source_id).rights_confirmed:
         reasons.append("Chưa xác nhận quyền nguồn")
     if not consent.get("train"):

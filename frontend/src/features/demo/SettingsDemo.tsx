@@ -1,6 +1,6 @@
 import { ResponsiveTable } from "../../components/ResponsiveTable";
 import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { useDemo } from "./context";
 import { uid } from "./domain";
 import { METHODS } from "./seed";
@@ -13,6 +13,8 @@ import { MediaAttach } from "./ContributionDemo";
 const RIGHT_LABEL = { train: "dùng để huấn luyện", public: "công khai", audio: "dùng âm thanh" } as const;
 
 export function SettingsDemo() {
+  const [params] = useSearchParams();
+  if (params.get("section") !== "sources") return <Navigate to="/demo/reviewer/review" replace />;
   return (
     <DemoGuard>
       <SettingsInner />

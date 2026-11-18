@@ -14,7 +14,7 @@ const VIEWS = [["pending","Chờ đánh giá"],["mine","Phiếu của tôi"],["h
 const CHECKS = [["meaning_ok","Nghĩa được giải thích đúng"],["region_ok","Có cơ sở xác nhận vùng sử dụng"],["context_ok","Ví dụ và ngữ cảnh tự nhiên"],["translation_ok","Bản phổ thông phù hợp"]] as const;
 const EMPTY = {note:"",verdict:"HOLD",checks:{meaning_ok:false,region_ok:false,context_ok:false,translation_ok:false}};
 
-export const REVIEW_SOP = "Mỗi đóng góp cần hai người duyệt độc lập trong vùng được giao. Bạn không thể duyệt đóng góp của mình. Nếu hai người không thống nhất, quản trị viên độc lập sẽ quyết định. Chỉ chỉnh lý sau khi đã duyệt đạt; nội dung gốc luôn được giữ nguyên.";
+export const REVIEW_SOP = "Mỗi mẫu cần một Reviewer duyệt. Không tự duyệt mẫu của mình. Sửa nội dung phải duyệt lại; bản gốc luôn được giữ nguyên.";
 
 export function BulkReviewControls({items, admin, reload}: {items: {id:number; label:string}[]; admin:boolean; reload:()=>void|Promise<void>}) {
   const [ids,setIds]=useState<number[]>([]);
@@ -27,7 +27,7 @@ export function BulkReviewControls({items, admin, reload}: {items: {id:number; l
     <p>Dùng khi nhiều đóng góp cần cùng một cách xử lý. Hãy đọc từng nội dung trước khi chọn. Tạm giữ hoặc đưa lại hàng chờ chỉ áp dụng khi chưa có đánh giá; từ chối cần hai đánh giá và quản trị viên độc lập. Nếu một mục không hợp lệ, toàn bộ lựa chọn sẽ không được cập nhật.</p>
     <div style={{maxHeight:180,overflowY:"auto"}}>{items.slice(0,100).map(item=><label key={item.id} className="review-bulk-choice"><input type="checkbox" disabled={busy} checked={visible.includes(item.id)} onChange={e=>setIds(e.target.checked?[...visible,item.id]:visible.filter(id=>id!==item.id))}/> #{item.id} · {item.label}</label>)}</div>
     <form onSubmit={async e=>{e.preventDefault();setBusy(true);setMessage("");try {const result=await apiClient.post("/dialect/reviews/bulk",{ids:visible,action,reason});setIds([]);setReason("");setMessage(`Đã cập nhật ${result.data.updated} mẫu.`);await reload();}catch(err){setMessage(extractError(err));}finally{setBusy(false);}}}>
-      <label>Thao tác<select className="form-select" disabled={busy} value={action} onChange={e=>setAction(e.target.value)}><option value="HOLD">Tạm giữ để kiểm tra</option><option value="REQUEUE">Đưa lại vào hàng chờ</option>{admin&&<option value="REJECT">Từ chối sau hai phiếu</option>}</select></label>
+      <label>Thao tác<select className="form-select" disabled={busy} value={action} onChange={e=>setAction(e.target.value)}><option value="HOLD">Tạm giữ để kiểm tra</option><option value="REQUEUE">Đưa lại vào hàng chờ</option>{admin&&<option value="REJECT">Từ chối sau một phiếu</option>}</select></label>
       <label>Lý do bắt buộc<textarea className="form-control" disabled={busy} required maxLength={2000} value={reason} onChange={e=>setReason(e.target.value)} placeholder="Đã kiểm tra nội dung nào, vì sao cần thay đổi?"/></label>
       <button className="btn btn-outline-primary" disabled={busy||!visible.length||!reason.trim()}>{busy?"Đang xử lý…":`Áp dụng cho ${visible.length} mẫu đã chọn`}</button>
     </form>{message&&<p role="status">{message}</p>}

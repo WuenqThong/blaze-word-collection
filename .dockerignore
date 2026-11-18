@@ -11,6 +11,7 @@
 **/dist
 **/.vite*
 docs
+deploy
 ml
 # Private local assistant files and editor visibility settings.
 *[cC][lL][aA][uU][dD][eE]*

@@ -68,12 +68,12 @@ def bulk_review(body: BulkReviewInput, db: Session = Depends(get_db), user: User
                     raise HTTPException(409, "Chỉ đưa lại hàng chờ mẫu HOLD chưa có phiếu; mẫu đã duyệt cần phiên bản mới")
             elif body.action == "HOLD":
                 if item.status not in ("RAW", "REVIEW") or votes:
-                    raise HTTPException(409, "Chỉ tạm giữ mẫu chưa có phiếu; mẫu đang duyệt cần hai phiếu độc lập")
+                    raise HTTPException(409, "Chỉ tạm giữ mẫu chưa có phiếu; mẫu đang duyệt cần một phiếu độc lập")
             else:
                 if user.role not in ('admin', 'reviewer') or any(v.reviewer_id == user.id for v in votes):
                     raise HTTPException(403, "Từ chối hàng loạt cần quản trị viên độc lập")
-                if item.status != "REVIEW" or len({v.reviewer_id for v in bound_votes(db, item)}) < 2:
-                    raise HTTPException(409, "Cần ít nhất hai phiếu độc lập trước khi từ chối")
+                if item.status != "REVIEW" or len({v.reviewer_id for v in bound_votes(db, item)}) < 1:
+                    raise HTTPException(409, "Cần ít nhất một phiếu độc lập trước khi từ chối")
         request_id = request_id_context.get() or uuid4().hex
         for item in items:
             before = item.status
